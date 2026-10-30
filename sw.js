@@ -1,6 +1,6 @@
 // Service worker: membuat aplikasi bisa di-install dan tampilannya tetap terbuka saat sinyal lemah.
 // Naikkan VERSI setiap kali index.html diubah agar HP mengambil versi baru.
-const VERSI = 'photobooth-v5';
+const VERSI = 'photobooth-v6';
 const FILE_INTI = [
   './',
   './index.html',

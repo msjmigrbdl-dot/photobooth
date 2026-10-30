@@ -178,7 +178,7 @@
           </div>
 
           <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-            <div class="text-xs font-extrabold uppercase text-slate-500">3 Foto Bertemplate • ketuk untuk cetak satu</div>
+            <div class="text-xs font-extrabold uppercase text-slate-500">3 Foto Berframe (di folder member) • yang dicetak: Foto 1</div>
             <div id="cetak-thumbs" class="grid grid-cols-3 gap-2"></div>
           </div>
 
@@ -204,7 +204,7 @@
         </div>
 
         <div class="space-y-3">
-          <button id="btn-cetak-sekarang" type="button" class="w-full h-16 rounded-2xl bg-emerald-600 active:bg-emerald-700 text-white text-lg font-extrabold shadow-md">🖨️ Cetak Semua (3 Foto)</button>
+          <button id="btn-cetak-sekarang" type="button" class="w-full h-16 rounded-2xl bg-emerald-600 active:bg-emerald-700 text-white text-lg font-extrabold shadow-md">🖨️ Cetak Foto 1</button>
           <button id="btn-member-berikutnya" type="button" class="btn-primary w-full h-16 rounded-2xl text-lg font-extrabold shadow-md">🔄 Member Berikutnya</button>
         </div>
       </section>
@@ -1055,7 +1055,8 @@
       Promise.all(tunggu).then(function() { setTimeout(function() { window.print(); }, 50); });
     }
 
-    function renderThumbs(box, list) {
+    function renderThumbs(box, list, bisaCetak) {
+      bisaCetak = bisaCetak !== false;
       box.innerHTML = '';
       list.forEach(function(src, i) {
         const b = document.createElement('button');
@@ -1067,10 +1068,11 @@
         im.className = 'w-full h-auto block';
         const cap = document.createElement('div');
         cap.className = 'py-1';
-        cap.textContent = '🖨️ Foto ' + (i + 1);
+        cap.textContent = bisaCetak ? '🖨️ Foto ' + (i + 1) : 'Foto ' + (i + 1) + (i === 0 ? ' • dicetak' : '');
         b.appendChild(im);
         b.appendChild(cap);
-        b.addEventListener('click', function() { cetakGambar([src]); });
+        if (bisaCetak) b.addEventListener('click', function() { cetakGambar([src]); });
+        else b.disabled = true;
         box.appendChild(b);
       });
     }
@@ -1098,7 +1100,7 @@
           cetakList.push(cvs.toDataURL('image/jpeg', 0.92));
         }
         sessionState.cetakList = cetakList;
-        renderThumbs(el('cetak-thumbs'), cetakList);
+        renderThumbs(el('cetak-thumbs'), cetakList, false);
 
         el('btn-to-step-3-text').textContent = 'Menyimpan ke Drive...';
         const res = await callServer('finalisasiCetakDanLog', {
@@ -1215,7 +1217,7 @@
       el('camera-select').addEventListener('change', gantiKamera);
       el('btn-cam-close').addEventListener('click', closeCamera);
       el('btn-to-step-3').addEventListener('click', handleToStep3);
-      el('btn-cetak-sekarang').addEventListener('click', function() { cetakGambar(sessionState.cetakList); });
+      el('btn-cetak-sekarang').addEventListener('click', function() { cetakGambar(sessionState.cetakList.slice(0, 1)); });
       el('btn-reprint-all').addEventListener('click', function() { cetakGambar(reprintList); });
       el('btn-reprint-close').addEventListener('click', function() { el('reprint-modal').classList.add('hidden'); });
       el('btn-member-berikutnya').addEventListener('click', function() {
