@@ -237,12 +237,12 @@
       printHeight: 1200,
       templateWidth: 1754,
       templateHeight: 1240,
-      canvasBgColor: '#E2E3E2',
+      canvasBgColor: '#FFFFFF',
       printSafeMarginMm: 3,
-      photoArea: { x: 36, y: 38, width: 1681, height: 1043 },
+      photoArea: { x: 36, y: 38, width: 1681, height: 1026 },
       fitMode: 'cover',
       photoBgColor: '#FFFFFF',
-      label: { show: true, text: '#{NO} - {KODE}', x: 1710, y: 1112, align: 'right', fontFamily: 'Roboto Mono', fontSize: 26, fontWeight: '400', color: '#D62D2D', bgColor: '', bgPadding: 10, bgRadius: 8 },
+      label: { show: true, text: '#{NO} - {KODE}', pixelFont: true, x: 98, y: 1158.5, align: 'left', fontSize: 38, maxWidth: 1220, color: '#D62D2D', bgColor: '' },
       countdownSeconds: 0,
       mirrorHasil: false,
       gif: { enabled: true, width: 960, perFotoMs: 1000, loops: 2, loopForever: false },
@@ -675,6 +675,36 @@
       ctx.closePath();
     }
 
+    const PIXEL_FONT = {"0":[".###.","#...#","#...#","#.#.#","#...#","#...#",".###."],"1":[".#","##",".#",".#",".#",".#",".#"],"2":[".###.","#...#","....#","..##.",".#...","#....","#####"],"3":[".###.","#...#","....#","..##.","....#","#...#",".###."],"4":["...#.","..##.",".#.#.","#..#.","#####","...#.","...#."],"5":["#####","#....","####.","....#","....#","#...#",".###."],"6":[".###.","#...#","#....","####.","#...#","#...#",".###."],"7":["#####","....#","....#","...#.","..#..",".#...",".#..."],"8":[".###.","#...#","#...#",".###.","#...#","#...#",".###."],"9":[".###.","#...#","#...#",".####","....#","#...#",".###."],"A":[".###.","#...#","#...#","#####","#...#","#...#","#...#"],"B":["####.","#...#","#...#","####.","#...#","#...#","####."],"C":[".###.","#...#","#....","#....","#....","#...#",".###."],"D":["####.","#...#","#...#","#...#","#...#","#...#","####."],"E":["#####","#....","#....","####.","#....","#....","#####"],"F":["#####","#....","#....","####.","#....","#....","#...."],"G":[".###.","#...#","#....","#.###","#...#","#...#",".###."],"H":["#...#","#...#","#...#","#####","#...#","#...#","#...#"],"I":["###",".#.",".#.",".#.",".#.",".#.","###"],"J":["..###","...#.","...#.","...#.","...#.","#..#.",".##.."],"K":["#...#","#..#.","#.#..","##...","#.#..","#..#.","#...#"],"L":["#....","#....","#....","#....","#....","#....","#####"],"M":["#...#","##.##","#.#.#","#.#.#","#...#","#...#","#...#"],"N":["#...#","#...#","##..#","#.#.#","#..##","#...#","#...#"],"O":[".###.","#...#","#...#","#...#","#...#","#...#",".###."],"P":["####.","#...#","#...#","####.","#....","#....","#...."],"Q":[".###.","#...#","#...#","#...#","#.#.#","#..#.",".##.#"],"R":["####.","#...#","#...#","####.","#.#..","#..#.","#...#"],"S":[".####","#....","#....",".###.","....#","....#","####."],"T":["#####","..#..","..#..","..#..","..#..","..#..","..#.."],"U":["#...#","#...#","#...#","#...#","#...#","#...#",".###."],"V":["#...#","#...#","#...#","#...#","#...#",".#.#.","..#.."],"W":["#...#","#...#","#...#","#.#.#","#.#.#","#.#.#",".#.#."],"X":["#...#","#...#",".#.#.","..#..",".#.#.","#...#","#...#"],"Y":["#...#","#...#",".#.#.","..#..","..#..","..#..","..#.."],"Z":["#####","....#","...#.","..#..",".#...","#....","#####"],"#":[".#.#.",".#.#.","#####",".#.#.","#####",".#.#.",".#.#."],"-":["...","...","...","###","...","...","..."],"_":["....","....","....","....","....","....","####"],".":[".",".",".",".",".",".","#"],":":[".",".","#",".",".",".","#"],"/":["....#","....#","...#.","..#..",".#...","#....","#...."]," ":["..","..","..","..","..","..",".."]};
+
+    /* Huruf piksel 5x7 meniru gaya teks "BANDAR LAMPUNG / 07:11:2026" di template.
+       unit = ukuran 1 piksel huruf (tinggi huruf = 7 unit, jarak antar huruf = 1 unit). */
+    function lebarPixelText(text, unit) {
+      let w = 0;
+      String(text).toUpperCase().split('').forEach(function(ch, i) {
+        const g = PIXEL_FONT[ch] || PIXEL_FONT[' '];
+        w += g[0].length * unit + (i ? unit : 0);
+      });
+      return w;
+    }
+    function gambarPixelText(ctx, text, x, yTengah, unit, warna) {
+      const top = Math.round(yTengah - (7 * unit) / 2);
+      let cx = x;
+      ctx.fillStyle = warna;
+      String(text).toUpperCase().split('').forEach(function(ch) {
+        const g = PIXEL_FONT[ch] || PIXEL_FONT[' '];
+        for (let r = 0; r < 7; r++) {
+          for (let c = 0; c < g[r].length; c++) {
+            if (g[r][c] !== '#') continue;
+            const x0 = Math.round(cx + c * unit), y0 = Math.round(top + r * unit);
+            const x1 = Math.round(cx + (c + 1) * unit), y1 = Math.round(top + (r + 1) * unit);
+            ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+          }
+        }
+        cx += (g[0].length + 1) * unit;
+      });
+    }
+
     async function drawLabel(ctx, t, sesi) {
       const L0 = appConfig.label;
       if (!L0 || !L0.show) return;
@@ -689,6 +719,20 @@
         .split('{NO}').join(sesi.noAntrian)
         .split('{KODE}').join(sesi.kodeMember)
         .split('{TANGGAL}').join(sessionState.tanggal || appConfig.tanggalHariIni);
+      if (L.pixelFont) {
+        // fontSize = tinggi huruf (7 unit). Dikecilkan otomatis bila melebihi maxWidth.
+        let unit = L.fontSize / 7;
+        const maks = (L0.maxWidth || 0) * t.s;
+        if (maks && lebarPixelText(text, unit) > maks) unit = unit * maks / lebarPixelText(text, unit);
+        const w = lebarPixelText(text, unit);
+        let x = L.x;
+        if ((L.align || 'left') === 'right') x = L.x - w;
+        else if (L.align === 'center') x = L.x - w / 2;
+        ctx.save();
+        gambarPixelText(ctx, text, x, L.y, unit, L.color || '#D62D2D');
+        ctx.restore();
+        return;
+      }
       const family = L.fontFamily ? '"' + L.fontFamily + '", ' : '';
       const font = (L.fontWeight || '400') + ' ' + L.fontSize + 'px ' + family + 'Inter, Arial, sans-serif';
       try { await document.fonts.load(font); } catch (e) {}
@@ -713,10 +757,27 @@
     }
 
     let frameImgCache = null;
+    let frameMenutupFoto = false; // true = area foto di template TIDAK transparan
     async function getFrameImg() {
       if (!appConfig.frameDataUrl) return null;
       if (!frameImgCache) {
-        try { frameImgCache = await loadImg(appConfig.frameDataUrl); } catch (e) { frameImgCache = null; }
+        try {
+          frameImgCache = await loadImg(appConfig.frameDataUrl);
+          // Cek apakah tengah area foto di template transparan. Jika tidak (mis. PNG berlatar putih),
+          // template digambar lebih dulu lalu foto ditaruh di atasnya, agar foto tidak tertutup.
+          const TW = appConfig.templateWidth || frameImgCache.width;
+          const TH = appConfig.templateHeight || frameImgCache.height;
+          const A = appConfig.photoArea;
+          const c = document.createElement('canvas');
+          c.width = TW; c.height = TH;
+          const cx = c.getContext('2d', { willReadFrequently: true });
+          cx.drawImage(frameImgCache, 0, 0, TW, TH);
+          const titik = [[0.5, 0.5], [0.25, 0.25], [0.75, 0.75]];
+          frameMenutupFoto = titik.every(function(p) {
+            const d = cx.getImageData(Math.round(A.x + A.width * p[0]), Math.round(A.y + A.height * p[1]), 1, 1).data;
+            return d[3] > 200;
+          });
+        } catch (e) { frameImgCache = null; }
       }
       return frameImgCache;
     }
@@ -733,9 +794,14 @@
       const t = { s: s, ox: (W - TW * s) / 2, oy: (H - TH * s) / 2 };
       const A = appConfig.photoArea;
       const area = { x: t.ox + A.x * s, y: t.oy + A.y * s, width: A.width * s, height: A.height * s };
-      drawFitted(ctx, photoImg, area, appConfig.fitMode);
       const fr = await getFrameImg();
-      if (fr) ctx.drawImage(fr, t.ox, t.oy, TW * s, TH * s);
+      if (fr && frameMenutupFoto) {
+        ctx.drawImage(fr, t.ox, t.oy, TW * s, TH * s);
+        drawFitted(ctx, photoImg, area, appConfig.fitMode);
+      } else {
+        drawFitted(ctx, photoImg, area, appConfig.fitMode);
+        if (fr) ctx.drawImage(fr, t.ox, t.oy, TW * s, TH * s);
+      }
       await drawLabel(ctx, t, sesi || sessionState);
     }
 
