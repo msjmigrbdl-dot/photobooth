@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Photo Booth Member</title>
+  <meta name="theme-color" content="#2563EB">
+  <meta name="apple-mobile-web-app-title" content="Photo Booth">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script src="config.js"></script>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --primary: #2563EB; --accent: #1D4ED8; --bg-page: #F8FAFC; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-page); color: #0F172A; margin: 0; min-height: 100vh; }
+    .btn-primary { background: var(--primary); color: #fff; transition: transform 0.1s, background 0.15s, opacity 0.15s; }
+    .btn-primary:active:not(:disabled) { background: var(--accent); transform: scale(0.985); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    .step-pill-active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    #camera-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    .flash { animation: flash 0.35s ease-out; }
+    @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
+    @page { size: 6in 4in; margin: 0; }
+    @media print {
+      body * { visibility: hidden; }
+      #print-sheet-area, #print-sheet-area * { visibility: visible; }
+      #print-sheet-area { position: fixed; inset: 0; width: 100vw; height: 100vh; display: flex !important; align-items: center; justify-content: center; background: #fff; }
+      #print-sheet-img { width: 100%; height: 100%; object-fit: contain; }
+    }
+  </style>
+</head>
+<body>
+  <!-- MODAL PENGATURAN (URL API) -->
+  <div id="setup-modal" class="hidden fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4">
+    <form id="setup-form" class="bg-white rounded-3xl p-5 w-full max-w-sm space-y-3" autocomplete="off">
+      <div>
+        <h2 class="text-xl font-extrabold text-slate-900">⚙️ Pengaturan</h2>
+        <p class="text-xs text-slate-500">Hanya perlu diisi jika URL belum ditulis di config.js.</p>
+      </div>
+      <label class="block space-y-1">
+        <span class="text-xs font-bold text-slate-600">URL Web App Apps Script (berakhiran /exec)</span>
+        <input id="setup-url" type="url" required placeholder="https://script.google.com/macros/s/.../exec" class="w-full h-12 px-3 rounded-xl border-2 border-slate-300 focus:border-blue-600 outline-none text-sm">
+      </label>
+      <p id="setup-status" class="text-xs font-semibold text-slate-600 min-h-[1rem]"></p>
+      <button id="btn-setup-save" type="submit" class="btn-primary w-full h-12 rounded-xl font-extrabold">Simpan &amp; Tes Koneksi</button>
+      <button id="btn-setup-close" type="button" class="w-full h-11 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold">Tutup</button>
+    </form>
+  </div>
+
+  <div id="print-sheet-area" class="hidden"><img id="print-sheet-img" alt="File Cetak 4R"></div>
+
+  <!-- MODAL KAMERA LIVE -->
+  <div id="camera-modal" class="hidden fixed inset-0 z-50 bg-black flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 text-white">
+      <div>
+        <div class="text-[11px] uppercase text-slate-400 font-semibold">Kamera Live</div>
+        <div id="camera-label" class="text-lg font-extrabold">Foto 1 dari 3</div>
+      </div>
+      <button id="btn-cam-close" type="button" class="px-4 h-11 rounded-xl bg-slate-800 text-sm font-bold">Tutup</button>
+    </div>
+    <div class="relative flex-1 overflow-hidden">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <div id="camera-countdown" class="hidden absolute inset-0 flex items-center justify-center text-white text-9xl font-extrabold drop-shadow-lg"></div>
+      <div id="camera-flash" class="hidden absolute inset-0 bg-white"></div>
+    </div>
+    <div class="grid grid-cols-4 gap-2 px-4 py-4">
+      <button id="btn-cam-switch" type="button" class="col-span-1 h-16 rounded-2xl bg-slate-800 text-white text-xs font-bold">🔄 Ganti Kamera</button>
+      <button id="btn-cam-shoot" type="button" class="col-span-3 h-16 rounded-2xl bg-white text-slate-900 text-lg font-extrabold">📸 Jepret</button>
+    </div>
+  </div>
+
+  <!-- MODAL QR -->
+  <div id="qr-modal" class="hidden fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-5 w-full max-w-xs text-center space-y-3">
+      <div id="qr-modal-title" class="text-lg font-extrabold">001_MBR001</div>
+      <div id="qr-modal-box" class="flex justify-center"></div>
+      <p class="text-xs text-slate-500">Scan untuk melihat 3 foto member</p>
+      <button id="btn-qr-close" type="button" class="btn-primary w-full h-12 rounded-xl font-extrabold">Tutup</button>
+    </div>
+  </div>
+
+  <div class="max-w-md mx-auto min-h-screen flex flex-col justify-between px-4 py-4">
+    <header class="space-y-3">
+      <div class="flex items-center justify-between bg-white rounded-2xl px-4 py-3 shadow-sm border border-slate-200">
+        <div>
+          <h1 id="app-title" class="text-lg font-extrabold text-slate-900">Photo Booth Member</h1>
+          <p class="text-xs font-medium text-slate-500">Panel Operator • <span id="header-date">-</span></p>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button id="btn-install" type="button" class="hidden px-3 h-10 rounded-xl bg-emerald-600 text-white text-xs font-bold">📲 Install</button>
+          <button id="btn-open-list" type="button" class="px-3 h-10 rounded-xl bg-slate-900 text-white text-xs font-bold">📋 Daftar</button>
+          <button id="btn-settings" type="button" aria-label="Pengaturan" class="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 text-base font-bold">⚙️</button>
+        </div>
+      </div>
+
+      <div id="step-indicators" class="grid grid-cols-3 gap-2 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200">
+        <div id="step-indicator-1" class="step-pill-active flex items-center justify-center py-2.5 px-2 rounded-xl border text-xs font-bold">1. Kode</div>
+        <div id="step-indicator-2" class="flex items-center justify-center py-2.5 px-2 rounded-xl border border-transparent text-slate-500 text-xs font-bold">2. 3 Foto</div>
+        <div id="step-indicator-3" class="flex items-center justify-center py-2.5 px-2 rounded-xl border border-transparent text-slate-500 text-xs font-bold">3. Cetak</div>
+      </div>
+
+      <div id="status-banner" class="hidden rounded-2xl px-4 py-3 text-sm font-semibold border"></div>
+    </header>
+
+    <main class="my-4 flex-1 flex flex-col">
+      <!-- LANGKAH 1 -->
+      <section id="step-1" class="flex-1 flex flex-col bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-5">
+        <span class="inline-block self-start px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">LANGKAH 1 DARI 3</span>
+        <div>
+          <h2 class="text-2xl font-extrabold text-slate-900">Scan / Ketik Kode Member</h2>
+          <p class="text-sm text-slate-600 mt-1">Gunakan barcode scanner Bluetooth (otomatis kirim Enter) atau ketik manual.</p>
+        </div>
+        <form id="form-step-1" class="space-y-3" autocomplete="off">
+          <input id="input-member-code" type="text" autofocus placeholder="Contoh: MBR001" class="w-full h-16 px-4 text-2xl font-extrabold uppercase tracking-wider text-center rounded-2xl border-2 border-slate-300 focus:border-blue-600 outline-none">
+          <p id="regex-hint" class="text-xs text-slate-500 text-center">Format: 3–20 karakter huruf/angka/strip</p>
+          <button id="btn-submit-code" type="submit" class="btn-primary w-full h-16 rounded-2xl text-lg font-extrabold shadow-md">Ambil Nomor Antrian &amp; Lanjut →</button>
+        </form>
+      </section>
+
+      <!-- LANGKAH 2 -->
+      <section id="step-2" class="hidden flex-1 flex flex-col justify-between bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
+        <div class="space-y-3">
+          <div class="flex items-center justify-between bg-slate-900 text-white rounded-2xl px-4 py-3">
+            <div>
+              <div class="text-[11px] uppercase text-slate-400 font-semibold">Sesi Member Aktif</div>
+              <div id="session-badge-title" class="text-lg font-extrabold">001_MBR001</div>
+            </div>
+            <button id="btn-back-step-1" type="button" class="px-3 py-2 rounded-xl bg-slate-800 text-xs font-bold text-slate-200">Ganti Kode</button>
+          </div>
+
+          <button id="btn-start-session" type="button" class="btn-primary w-full h-16 rounded-2xl text-lg font-extrabold shadow-md">▶ Mulai Foto (3x berturut-turut)</button>
+
+          <div id="photo-cards" class="space-y-3"></div>
+        </div>
+
+        <button id="btn-to-step-3" type="button" disabled class="btn-primary w-full h-16 rounded-2xl text-lg font-extrabold shadow-md">
+          <span id="btn-to-step-3-text">Lengkapi 3 Foto Terlebih Dahulu (0/3)</span>
+        </button>
+      </section>
+
+      <!-- LANGKAH 3 -->
+      <section id="step-3" class="hidden flex-1 flex flex-col justify-between bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-5">
+        <div class="space-y-4">
+          <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-center justify-between">
+            <div>
+              <div class="text-xs font-bold uppercase text-emerald-700">Sesi Selesai &amp; Tersimpan</div>
+              <div id="step-3-session-label" class="text-lg font-extrabold text-emerald-950">001_MBR001</div>
+            </div>
+            <span class="px-3 py-1 rounded-full bg-emerald-600 text-white text-xs font-extrabold">4R Landscape</span>
+          </div>
+
+          <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex flex-col items-center text-center space-y-3">
+            <div class="text-xs font-extrabold uppercase text-slate-500">Scan QR Folder Google Drive Member</div>
+            <div id="qrcode-box" class="bg-white p-3.5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center min-h-[210px] min-w-[210px]"></div>
+            <a id="link-folder-member" href="https://drive.google.com" target="_blank" rel="noopener noreferrer" class="text-xs font-bold text-blue-600 underline break-all">Buka Folder Member ↗</a>
+          </div>
+
+          <div class="rounded-2xl overflow-hidden border border-slate-300 bg-slate-100 flex justify-center p-2">
+            <canvas id="canvas-cetak" width="1800" height="1200" class="w-full h-auto rounded-lg shadow-sm bg-white"></canvas>
+          </div>
+
+          <div id="video-box" class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-extrabold uppercase text-slate-500">Video 6 Detik</span>
+              <a id="video-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden text-xs font-bold text-blue-600 underline">Buka Video ↗</a>
+            </div>
+            <p id="video-status" class="text-xs text-slate-600">-</p>
+            <video id="video-preview" class="hidden w-full rounded-lg bg-black" controls playsinline muted loop></video>
+            <button id="btn-video-retry" type="button" class="hidden w-full h-11 rounded-xl bg-slate-200 text-slate-800 text-sm font-extrabold">Buat Ulang Video</button>
+          </div>
+
+          <div id="gif-box" class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-extrabold uppercase text-slate-500">GIF Animasi 3 Foto</span>
+              <a id="gif-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden text-xs font-bold text-blue-600 underline">Buka GIF ↗</a>
+            </div>
+            <p id="gif-status" class="text-xs text-slate-600">-</p>
+            <img id="gif-preview" alt="GIF animasi" class="hidden w-full rounded-lg">
+            <button id="btn-gif-retry" type="button" class="hidden w-full h-11 rounded-xl bg-slate-200 text-slate-800 text-sm font-extrabold">Buat Ulang GIF</button>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <button id="btn-cetak-sekarang" type="button" class="w-full h-16 rounded-2xl bg-emerald-600 active:bg-emerald-700 text-white text-lg font-extrabold shadow-md">🖨️ Cetak Sekarang</button>
+          <a id="link-pdf-4r" href="#" target="_blank" rel="noopener noreferrer" class="hidden w-full h-14 rounded-2xl bg-white border-2 border-emerald-600 text-emerald-700 text-base font-extrabold flex items-center justify-center">📄 Buka PDF 4R (cetak dari Drive)</a>
+          <button id="btn-member-berikutnya" type="button" class="btn-primary w-full h-16 rounded-2xl text-lg font-extrabold shadow-md">🔄 Member Berikutnya</button>
+        </div>
+      </section>
+
+      <!-- DAFTAR MEMBER -->
+      <section id="step-list" class="hidden flex-1 flex flex-col bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-extrabold text-slate-900">Daftar Member Sudah Foto</h2>
+            <p id="list-summary" class="text-xs text-slate-500">Memuat...</p>
+          </div>
+          <button id="btn-close-list" type="button" class="px-3 h-10 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold">← Kembali</button>
+        </div>
+        <div class="grid grid-cols-5 gap-2">
+          <input id="list-date" type="date" class="col-span-3 h-12 px-3 rounded-xl border-2 border-slate-200 font-semibold">
+          <button id="btn-list-refresh" type="button" class="col-span-2 btn-primary h-12 rounded-xl text-sm font-extrabold">Muat Ulang</button>
+        </div>
+        <input id="list-search" type="text" placeholder="Cari kode member / no antrian..." class="w-full h-12 px-4 rounded-xl border-2 border-slate-200 font-semibold uppercase">
+        <div id="list-items" class="space-y-2"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const appConfig = {
+      appTitle: 'Photo Booth Member',
+      memberCodeRegex: '^[A-Z0-9-]{3,20}$',
+      memberCodeHint: 'Gunakan 3–20 karakter huruf/angka/strip',
+      printWidth: 1800,
+      printHeight: 1200,
+      templateWidth: 1754,
+      templateHeight: 1240,
+      canvasBgColor: '#E2E3E2',
+      printSafeMarginMm: 3,
+      photoArea: { x: 36, y: 38, width: 1681, height: 1043 },
+      fitMode: 'cover',
+      photoBgColor: '#FFFFFF',
+      label: { show: true, text: '#{NO} - {KODE}', x: 1710, y: 1112, align: 'right', fontFamily: 'Roboto Mono', fontSize: 26, fontWeight: '400', color: '#D62D2D', bgColor: '', bgPadding: 10, bgRadius: 8 },
+      countdownSeconds: 3,
+      mirrorHasil: false,
+      gif: { enabled: true, width: 960, perFotoMs: 1000, loops: 2, loopForever: false },
+      video: { enabled: true, width: 1280, perFotoMs: 1000, loops: 2, fps: 30, bitrate: 5000000 },
+      frameDataUrl: null,
+      tanggalHariIni: new Date().toISOString().slice(0, 10)
+    };
+
+    const sessionState = {
+      tanggal: '', noAntrian: '', kodeMember: '',
+      memberFolderId: '', memberFolderUrl: '', cetakFolderId: '', cetakDataUrl: '',
+      photos: { 1: {}, 2: {}, 3: {} }
+    };
+
+    let currentStep = 1;
+    let listCache = [];
+
+    /* ---------------- Util ---------------- */
+    function el(id) { return document.getElementById(id); }
+    function wait(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+      });
+    }
+    /* ---------------- API ke Apps Script (GitHub Pages / PWA) ---------------- */
+    function bacaLokal(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+    function tulisLokal(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    function apiSettings() {
+      const bawaan = (window.PHOTOBOOTH_CONFIG && window.PHOTOBOOTH_CONFIG.API_URL) || '';
+      return { url: bacaLokal('pb_api_url') || bawaan };
+    }
+    async function callServerWith(s, fn, payload) {
+      if (!s.url) throw new Error('URL API belum diatur. Buka ⚙️ Pengaturan.');
+      let resp;
+      try {
+        resp = await fetch(s.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ fn: fn, payload: payload })
+        });
+      } catch (e) {
+        throw new Error('Tidak bisa terhubung ke server. Cek internet, URL API, dan pastikan Web App di-deploy dengan akses "Anyone".');
+      }
+      const text = await resp.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch (e) {
+        throw new Error('Respon server tidak valid. Pastikan URL berakhiran /exec dan Web App sudah di-deploy versi terbaru.');
+      }
+      if (!data.ok) throw new Error(data.error || 'Permintaan gagal.');
+      return data.result;
+    }
+    function callServer(fn, payload) { return callServerWith(apiSettings(), fn, payload); }
+    function showBanner(msg, type) {
+      const b = el('status-banner');
+      if (!msg) { b.className = 'hidden'; return; }
+      const c = type === 'error' ? 'bg-red-50 text-red-800 border-red-200'
+        : type === 'warn' ? 'bg-amber-50 text-amber-800 border-amber-200'
+        : 'bg-emerald-50 text-emerald-800 border-emerald-200';
+      b.className = 'rounded-2xl px-4 py-3 text-sm font-semibold border ' + c;
+      b.textContent = msg;
+    }
+
+    function goToStep(step) {
+      ['1', '2', '3', 'list'].forEach(function(n) {
+        el('step-' + n).classList.toggle('hidden', String(step) !== n);
+      });
+      el('step-indicators').classList.toggle('hidden', step === 'list');
+      [1, 2, 3].forEach(function(n) {
+        el('step-indicator-' + n).className = n === step
+          ? 'step-pill-active flex items-center justify-center py-2.5 px-2 rounded-xl border text-xs font-bold'
+          : 'flex items-center justify-center py-2.5 px-2 rounded-xl border border-transparent text-slate-500 text-xs font-bold';
+      });
+      if (step !== 'list') currentStep = step;
+      if (step === 1) setTimeout(function() { el('input-member-code').focus(); }, 60);
+    }
+
+    /* ---------------- Foto: kompres & orientasi ---------------- */
+    function readExifOrientation(buf) {
+      try {
+        const view = new DataView(buf);
+        if (view.getUint16(0, false) !== 0xFFD8) return 1;
+        let offset = 2;
+        while (offset < view.byteLength) {
+          const marker = view.getUint16(offset, false);
+          offset += 2;
+          if (marker === 0xFFE1) {
+            if (view.getUint32(offset + 2, false) !== 0x45786966) break;
+            const little = view.getUint16(offset + 8, false) === 0x4949;
+            const tiff = offset + 8;
+            let dir = tiff + view.getUint32(tiff + 4, little);
+            const tags = view.getUint16(dir, little);
+            dir += 2;
+            for (let i = 0; i < tags; i++) {
+              const entry = dir + i * 12;
+              if (view.getUint16(entry, little) === 0x0112) return view.getUint16(entry + 8, little);
+            }
+          } else if ((marker & 0xFF00) !== 0xFF00) break;
+          else offset += view.getUint16(offset, false);
+        }
+      } catch (e) {}
+      return 1;
+    }
+
+    async function compressAndFixPhoto(file) {
+      const MAX_SIDE = 1600;
+      let drawable = null;
+      let exif = 1;
+      if (typeof createImageBitmap === 'function') {
+        try { drawable = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) {}
+      }
+      if (!drawable) {
+        exif = readExifOrientation(await file.arrayBuffer());
+        drawable = await new Promise(function(res, rej) {
+          const u = URL.createObjectURL(file);
+          const im = new Image();
+          im.onload = function() { URL.revokeObjectURL(u); res(im); };
+          im.onerror = rej;
+          im.src = u;
+        });
+      }
+      const w = drawable.width || drawable.naturalWidth;
+      const h = drawable.height || drawable.naturalHeight;
+      const scale = Math.max(w, h) > MAX_SIDE ? MAX_SIDE / Math.max(w, h) : 1;
+      const sw = Math.round(w * scale);
+      const sh = Math.round(h * scale);
+      const swap = exif >= 5 && exif <= 8;
+      const cvs = document.createElement('canvas');
+      cvs.width = swap ? sh : sw;
+      cvs.height = swap ? sw : sh;
+      const ctx = cvs.getContext('2d');
+      if (exif === 6) { ctx.rotate(0.5 * Math.PI); ctx.translate(0, -sh); }
+      else if (exif === 8) { ctx.rotate(-0.5 * Math.PI); ctx.translate(-sw, 0); }
+      else if (exif === 3) { ctx.translate(sw, sh); ctx.rotate(Math.PI); }
+      ctx.drawImage(drawable, 0, 0, sw, sh);
+      return cvs.toDataURL('image/jpeg', 0.85);
+    }
+
+    function loadImg(src) {
+      return new Promise(function(res, rej) {
+        const im = new Image();
+        im.onload = function() { res(im); };
+        im.onerror = rej;
+        im.src = src;
+      });
+    }
+
+    /* ---------------- Kartu foto (langkah 2) ---------------- */
+    function renderPhotoCards() {
+      const wrap = el('photo-cards');
+      wrap.innerHTML = '';
+      [1, 2, 3].forEach(function(n) {
+        const card = document.createElement('div');
+        card.className = 'rounded-2xl border-2 border-slate-200 p-3.5 bg-slate-50 space-y-2.5';
+        card.innerHTML =
+          '<div class="flex justify-between items-center">' +
+            '<span class="text-sm font-extrabold">📸 Foto ' + n + (n === 1 ? ' (Dicetak 4R)' : '') + '</span>' +
+            '<span id="badge-foto-' + n + '" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-200">0/1</span>' +
+          '</div>' +
+          '<p id="status-foto-' + n + '" class="text-xs text-slate-500">Belum diambil</p>' +
+          '<div id="preview-wrap-' + n + '" class="hidden rounded-xl overflow-hidden bg-slate-900"><img id="preview-img-' + n + '" class="w-full h-44 object-contain"></div>' +
+          '<input id="input-file-' + n + '" type="file" accept="image/*" class="hidden">' +
+          '<div class="grid grid-cols-2 gap-2">' +
+            '<button data-act="live" data-n="' + n + '" type="button" class="btn-primary h-12 rounded-xl text-sm font-extrabold">📷 Kamera Live</button>' +
+            '<button data-act="file" data-n="' + n + '" type="button" class="h-12 rounded-xl bg-slate-200 text-slate-800 text-sm font-extrabold">🖼️ Kamera HP / Galeri</button>' +
+          '</div>';
+        wrap.appendChild(card);
+        el('input-file-' + n).addEventListener('change', async function(e) {
+          const f = e.target.files[0];
+          if (!f) return;
+          try {
+            const dataUrl = await compressAndFixPhoto(f);
+            processPhoto(n, dataUrl);
+          } catch (err) {
+            el('status-foto-' + n).textContent = 'Gagal membaca foto: ' + err.message;
+          }
+        });
+      });
+      wrap.querySelectorAll('button[data-act]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          const n = parseInt(btn.getAttribute('data-n'), 10);
+          if (btn.getAttribute('data-act') === 'live') openCamera(n, true);
+          else { el('input-file-' + n).value = ''; el('input-file-' + n).click(); }
+        });
+      });
+    }
+
+    function resetPhotos() {
+      [1, 2, 3].forEach(function(n) { sessionState.photos[n] = { uploaded: false, uploading: false, dataUrl: '' }; });
+      renderPhotoCards();
+      updateStep2Btn();
+    }
+
+    function updateStep2Btn() {
+      const done = [1, 2, 3].filter(function(n) { return sessionState.photos[n].uploaded; }).length;
+      const busy = [1, 2, 3].some(function(n) { return sessionState.photos[n].uploading; });
+      el('btn-to-step-3').disabled = busy || done < 3;
+      el('btn-to-step-3-text').textContent = busy ? 'Mengupload Foto... (' + done + '/3)'
+        : (done === 3 ? 'Buat File Cetak 4R & QR Code →' : 'Lengkapi 3 Foto Terlebih Dahulu (' + done + '/3)');
+      el('btn-start-session').classList.toggle('hidden', done === 3 || busy);
+    }
+
+    async function processPhoto(n, dataUrl) {
+      const p = sessionState.photos[n];
+      p.uploading = true;
+      p.uploaded = false;
+      p.dataUrl = dataUrl;
+      updateStep2Btn();
+      el('preview-img-' + n).src = dataUrl;
+      el('preview-wrap-' + n).classList.remove('hidden');
+      el('status-foto-' + n).textContent = 'Mengupload ke Drive...';
+      el('badge-foto-' + n).textContent = '...';
+      try {
+        const res = await callServer('uploadFotoMember', {
+          memberFolderId: sessionState.memberFolderId,
+          noAntrian: sessionState.noAntrian,
+          kodeMember: sessionState.kodeMember,
+          nomorFoto: n,
+          base64Data: dataUrl
+        });
+        p.uploaded = true;
+        el('status-foto-' + n).textContent = 'Tersimpan: ' + res.fileName;
+        el('badge-foto-' + n).textContent = 'Siap ✓';
+      } catch (err) {
+        el('status-foto-' + n).textContent = 'Gagal upload: ' + err.message + ' (ambil ulang foto ini)';
+        el('badge-foto-' + n).textContent = 'Gagal';
+      } finally {
+        p.uploading = false;
+        updateStep2Btn();
+      }
+    }
+
+    /* ---------------- Kamera live ---------------- */
+    const cam = { stream: null, devices: [], deviceIndex: -1, target: 1, single: false, busy: false, mirror: true };
+
+    function nextEmptyPhoto(after) {
+      for (let k = 1; k <= 3; k++) {
+        if (k === after) continue;
+        const p = sessionState.photos[k];
+        if (!p.dataUrl) return k;
+      }
+      return 0;
+    }
+
+    function updateCamLabel() {
+      el('camera-label').textContent = 'Foto ' + cam.target + ' dari 3';
+    }
+
+    function stopStream() {
+      if (cam.stream) cam.stream.getTracks().forEach(function(t) { t.stop(); });
+      cam.stream = null;
+    }
+
+    async function startStream() {
+      stopStream();
+      const video = { width: { ideal: 1920 }, height: { ideal: 1440 } };
+      const dev = cam.devices[cam.deviceIndex];
+      if (dev && dev.deviceId) video.deviceId = { exact: dev.deviceId };
+      else video.facingMode = 'user';
+      cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: video });
+      const v = el('camera-video');
+      v.srcObject = cam.stream;
+      await v.play();
+
+      if (!cam.devices.length) {
+        const all = await navigator.mediaDevices.enumerateDevices();
+        cam.devices = all.filter(function(d) { return d.kind === 'videoinput'; });
+      }
+      const track = cam.stream.getVideoTracks()[0];
+      const st = track && track.getSettings ? track.getSettings() : {};
+      const idx = cam.devices.findIndex(function(d) { return d.deviceId === st.deviceId; });
+      if (idx >= 0) cam.deviceIndex = idx;
+      cam.mirror = st.facingMode ? st.facingMode === 'user' : true;
+      v.style.transform = cam.mirror ? 'scaleX(-1)' : 'none';
+      el('btn-cam-switch').classList.toggle('invisible', cam.devices.length < 2);
+    }
+
+    async function openCamera(n, single) {
+      cam.target = n;
+      cam.single = !!single;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        fallbackToFile(n, 'Browser ini tidak mendukung kamera live.');
+        return;
+      }
+      updateCamLabel();
+      el('camera-modal').classList.remove('hidden');
+      try {
+        await startStream();
+      } catch (err) {
+        closeCamera();
+        fallbackToFile(n, 'Kamera live tidak bisa dibuka (' + (err.name || err.message) + ').');
+      }
+    }
+
+    function fallbackToFile(n, reason) {
+      showBanner(reason + ' Memakai kamera HP / galeri. Izinkan akses kamera di pengaturan browser untuk kamera live.', 'warn');
+      el('input-file-' + n).value = '';
+      el('input-file-' + n).click();
+    }
+
+    function closeCamera() {
+      stopStream();
+      el('camera-modal').classList.add('hidden');
+      el('camera-countdown').classList.add('hidden');
+      cam.busy = false;
+    }
+
+    async function shoot() {
+      if (cam.busy || !cam.stream) return;
+      cam.busy = true;
+      const cd = el('camera-countdown');
+      for (let s = appConfig.countdownSeconds; s > 0; s--) {
+        cd.textContent = s;
+        cd.classList.remove('hidden');
+        await wait(1000);
+        if (!cam.stream) return;
+      }
+      cd.classList.add('hidden');
+
+      const v = el('camera-video');
+      const w = v.videoWidth, h = v.videoHeight;
+      const scale = Math.max(w, h) > 1600 ? 1600 / Math.max(w, h) : 1;
+      const cvs = document.createElement('canvas');
+      cvs.width = Math.round(w * scale);
+      cvs.height = Math.round(h * scale);
+      const ctx = cvs.getContext('2d');
+      if (cam.mirror && appConfig.mirrorHasil) { ctx.translate(cvs.width, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(v, 0, 0, cvs.width, cvs.height);
+      const dataUrl = cvs.toDataURL('image/jpeg', 0.85);
+
+      const fl = el('camera-flash');
+      fl.classList.remove('hidden', 'flash');
+      void fl.offsetWidth;
+      fl.classList.add('flash');
+      setTimeout(function() { fl.classList.add('hidden'); }, 350);
+
+      const n = cam.target;
+      processPhoto(n, dataUrl);
+
+      const next = cam.single ? 0 : nextEmptyPhoto(n);
+      if (next) {
+        cam.target = next;
+        updateCamLabel();
+        cam.busy = false;
+      } else {
+        await wait(400);
+        closeCamera();
+      }
+    }
+
+    async function switchCamera() {
+      if (cam.devices.length < 2) return;
+      cam.deviceIndex = (cam.deviceIndex + 1) % cam.devices.length;
+      try { await startStream(); } catch (err) { showBanner('Gagal ganti kamera: ' + err.message, 'error'); }
+    }
+
+    /* ---------------- Langkah 1 ---------------- */
+    async function handleStep1(e) {
+      if (e) e.preventDefault();
+      showBanner('', '');
+      const input = el('input-member-code');
+      const kode = String(input.value || '').trim().toUpperCase();
+      input.value = kode;
+      if (!kode || !(new RegExp(appConfig.memberCodeRegex)).test(kode)) {
+        showBanner('Kode member tidak valid. ' + appConfig.memberCodeHint, 'error');
+        input.focus();
+        return;
+      }
+      const btn = el('btn-submit-code');
+      btn.disabled = true;
+      try {
+        const res = await callServer('mulaiSesiMember', kode);
+        Object.assign(sessionState, res);
+        el('session-badge-title').textContent = res.noAntrian + '_' + res.kodeMember;
+        resetPhotos();
+        goToStep(2);
+      } catch (err) {
+        showBanner(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    /* ---------------- Langkah 3: komposisi 4R ---------------- */
+    function drawFitted(ctx, img, area, mode) {
+      const sc = mode === 'cover'
+        ? Math.max(area.width / img.width, area.height / img.height)
+        : Math.min(area.width / img.width, area.height / img.height);
+      const dw = img.width * sc, dh = img.height * sc;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(area.x, area.y, area.width, area.height);
+      ctx.clip();
+      ctx.fillStyle = appConfig.photoBgColor || '#FFFFFF';
+      ctx.fillRect(area.x, area.y, area.width, area.height);
+      ctx.drawImage(img, area.x + (area.width - dw) / 2, area.y + (area.height - dh) / 2, dw, dh);
+      ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    async function drawLabel(ctx, t, sesi) {
+      const L0 = appConfig.label;
+      if (!L0 || !L0.show) return;
+      const L = Object.assign({}, L0, {
+        x: t.ox + L0.x * t.s,
+        y: t.oy + L0.y * t.s,
+        fontSize: (L0.fontSize || 26) * t.s,
+        bgPadding: (L0.bgPadding || 0) * t.s,
+        bgRadius: (L0.bgRadius || 0) * t.s
+      });
+      const text = String(L.text || '')
+        .split('{NO}').join(sesi.noAntrian)
+        .split('{KODE}').join(sesi.kodeMember)
+        .split('{TANGGAL}').join(sessionState.tanggal || appConfig.tanggalHariIni);
+      const family = L.fontFamily ? '"' + L.fontFamily + '", ' : '';
+      const font = (L.fontWeight || '400') + ' ' + L.fontSize + 'px ' + family + 'Inter, Arial, sans-serif';
+      try { await document.fonts.load(font); } catch (e) {}
+      ctx.save();
+      ctx.font = font;
+      ctx.textAlign = L.align || 'center';
+      ctx.textBaseline = 'middle';
+      if (L.bgColor) {
+        const tw = ctx.measureText(text).width;
+        const pad = L.bgPadding || 12;
+        const bh = L.fontSize + pad * 2;
+        let bx = L.x - tw / 2 - pad;
+        if (ctx.textAlign === 'left') bx = L.x - pad;
+        if (ctx.textAlign === 'right') bx = L.x - tw - pad;
+        ctx.fillStyle = L.bgColor;
+        roundRect(ctx, bx, L.y - bh / 2, tw + pad * 2, bh, L.bgRadius || 0);
+        ctx.fill();
+      }
+      ctx.fillStyle = L.color || '#0F172A';
+      ctx.fillText(text, L.x, L.y);
+      ctx.restore();
+    }
+
+    let frameImgCache = null;
+    async function getFrameImg() {
+      if (!appConfig.frameDataUrl) return null;
+      if (!frameImgCache) {
+        try { frameImgCache = await loadImg(appConfig.frameDataUrl); } catch (e) { frameImgCache = null; }
+      }
+      return frameImgCache;
+    }
+
+    /** Gambar 1 kartu lengkap (latar, foto, bingkai, label) pada canvas W x H. */
+    async function composeCard(ctx, W, H, photoImg, sesi, marginPx) {
+      ctx.fillStyle = appConfig.canvasBgColor || '#FFFFFF';
+      ctx.fillRect(0, 0, W, H);
+      const TW = appConfig.templateWidth || W;
+      const TH = appConfig.templateHeight || H;
+      const m = Math.max(0, marginPx || 0);
+      // Template dikecilkan agar muat di dalam margin aman, tetap di tengah
+      const s = Math.min((W - 2 * m) / TW, (H - 2 * m) / TH);
+      const t = { s: s, ox: (W - TW * s) / 2, oy: (H - TH * s) / 2 };
+      const A = appConfig.photoArea;
+      const area = { x: t.ox + A.x * s, y: t.oy + A.y * s, width: A.width * s, height: A.height * s };
+      drawFitted(ctx, photoImg, area, appConfig.fitMode);
+      const fr = await getFrameImg();
+      if (fr) ctx.drawImage(fr, t.ox, t.oy, TW * s, TH * s);
+      await drawLabel(ctx, t, sesi || sessionState);
+    }
+
+    /* ---------------- GIF animasi ---------------- */
+    let gifLib = null;
+    function bytesToBase64(bytes) {
+      let bin = '';
+      const CH = 0x8000;
+      for (let i = 0; i < bytes.length; i += CH) {
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+      }
+      return btoa(bin);
+    }
+
+    function ambilSesi() {
+      return {
+        memberFolderId: sessionState.memberFolderId,
+        noAntrian: sessionState.noAntrian,
+        kodeMember: sessionState.kodeMember,
+        fotos: [1, 2, 3].map(function(n) { return sessionState.photos[n].dataUrl; })
+      };
+    }
+
+    function blobToBase64(blob) {
+      return new Promise(function(res, rej) {
+        const r = new FileReader();
+        r.onload = function() { res(String(r.result).split(',').pop()); };
+        r.onerror = rej;
+        r.readAsDataURL(blob);
+      });
+    }
+
+    function pilihFormatVideo() {
+      const kandidat = [
+        // MP4 H.264 diutamakan (bisa diputar di semua HP, termasuk iPhone)
+        'video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1',
+        'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm',
+        'video/mp4'
+      ];
+      for (let i = 0; i < kandidat.length; i++) {
+        try { if (MediaRecorder.isTypeSupported(kandidat[i])) return kandidat[i]; } catch (e) {}
+      }
+      return '';
+    }
+
+    /* ---------------- VIDEO 6 detik ---------------- */
+    function track0RequestFrame(stream) {
+      try {
+        const tr = stream.getVideoTracks()[0];
+        if (tr && typeof tr.requestFrame === 'function') tr.requestFrame();
+      } catch (e) {}
+    }
+
+    async function buatVideo(sesiParam) {
+      const V = appConfig.video || {};
+      if (!V.enabled) { el('video-box').classList.add('hidden'); return; }
+      el('video-box').classList.remove('hidden');
+      el('btn-video-retry').classList.add('hidden');
+      el('video-preview').classList.add('hidden');
+      el('video-link').classList.add('hidden');
+      const status = el('video-status');
+      const sesi = sesiParam || ambilSesi();
+      const masihSesiIni = function() { return sessionState.memberFolderId === sesi.memberFolderId; };
+      const tulis = function(msg) { if (masihSesiIni()) status.textContent = msg; };
+      let cvs = null;
+      try {
+        if (typeof MediaRecorder === 'undefined') throw new Error('Browser ini tidak mendukung perekaman video.');
+        const mime = pilihFormatVideo();
+        if (!mime) throw new Error('Format video tidak didukung browser ini.');
+        const ext = mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+
+        // Ukuran genap (wajib untuk encoder H.264)
+        const VW = Math.round((V.width || 1280) / 2) * 2;
+        const VH = Math.round(VW * (appConfig.printHeight || 1200) / (appConfig.printWidth || 1800) / 2) * 2;
+
+        // Siapkan 3 frame jadi (template + foto + label)
+        const frames = [];
+        for (let n = 1; n <= 3; n++) {
+          tulis('Menyusun frame video ' + n + ' dari 3...');
+          const fc = document.createElement('canvas');
+          fc.width = VW; fc.height = VH;
+          await composeCard(fc.getContext('2d'), VW, VH, await loadImg(sesi.fotos[n - 1]), sesi);
+          frames.push(fc);
+        }
+
+        // Canvas perekam (ditaruh di halaman tapi di luar layar, agar Safari ikut merekam)
+        cvs = document.createElement('canvas');
+        cvs.width = VW; cvs.height = VH;
+        cvs.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + VW + 'px;height:' + VH + 'px;';
+        document.body.appendChild(cvs);
+        const ctx = cvs.getContext('2d');
+        ctx.drawImage(frames[0], 0, 0);
+
+        const fps = V.fps || 30;
+        const per = V.perFotoMs || 1000;
+        const loops = Math.max(1, V.loops || 2);
+        const total = per * frames.length * loops;
+
+        const stream = cvs.captureStream(fps);
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: V.bitrate || 5000000 });
+        const chunks = [];
+        rec.ondataavailable = function(e) { if (e.data && e.data.size) chunks.push(e.data); };
+        const selesai = new Promise(function(res) { rec.onstop = res; });
+
+        tulis('Merekam video ' + (total / 1000) + ' detik... jangan tutup / pindah aplikasi.');
+        // Mulai menghitung waktu setelah perekam benar-benar aktif, agar foto pertama
+        // tidak terpotong di HP yang lambat menyalakan encoder.
+        const mulai = new Promise(function(res) { rec.onstart = res; });
+        rec.start(250);
+        await mulai;
+        if (typeof track0RequestFrame === 'function') track0RequestFrame(stream);
+        const t0 = performance.now();
+        await new Promise(function(res) {
+          const timer = setInterval(function() {
+            const el2 = performance.now() - t0;
+            if (el2 >= total) { clearInterval(timer); res(); return; }
+            const idx = Math.floor(el2 / per) % frames.length;
+            ctx.drawImage(frames[idx], 0, 0); // gambar ulang tiap tick agar frame terus mengalir
+          }, Math.round(1000 / fps));
+        });
+        ctx.drawImage(frames[frames.length - 1], 0, 0);
+        await wait(Math.round(1000 / fps) * 2);
+        rec.stop();
+        await selesai;
+        stream.getTracks().forEach(function(tr) { tr.stop(); });
+
+        const blob = new Blob(chunks, { type: mime.split(';')[0] });
+        if (!blob.size) throw new Error('Hasil rekaman kosong.');
+        if (masihSesiIni()) {
+          const vp = el('video-preview');
+          vp.src = URL.createObjectURL(blob);
+          vp.classList.remove('hidden');
+        }
+
+        tulis('Mengupload video (' + (blob.size / 1048576).toFixed(1) + ' MB) ke Drive...');
+        const res = await callServer('uploadVideoMember', {
+          memberFolderId: sesi.memberFolderId,
+          noAntrian: sesi.noAntrian,
+          kodeMember: sesi.kodeMember,
+          ext: ext,
+          base64Data: await blobToBase64(blob)
+        });
+        tulis('Tersimpan: ' + res.fileName);
+        if (masihSesiIni()) {
+          el('video-link').href = res.fileUrl;
+          el('video-link').classList.remove('hidden');
+        }
+      } catch (err) {
+        if (masihSesiIni()) {
+          status.textContent = 'Gagal membuat video: ' + err.message;
+          el('btn-video-retry').classList.remove('hidden');
+        } else {
+          showBanner('Video untuk ' + sesi.noAntrian + '_' + sesi.kodeMember + ' gagal dibuat: ' + err.message, 'error');
+        }
+      } finally {
+        if (cvs && cvs.parentNode) cvs.parentNode.removeChild(cvs);
+      }
+    }
+
+    /** Video dulu (butuh waktu nyata 6 detik), lalu GIF. */
+    async function prosesMedia() {
+      const sesi = ambilSesi();
+      await buatVideo(sesi);
+      await buatGif(sesi);
+    }
+
+    async function buatGif(sesiParam) {
+      const G = appConfig.gif || {};
+      const status = el('gif-status');
+      el('btn-gif-retry').classList.add('hidden');
+      if (!G.enabled) { el('gif-box').classList.add('hidden'); return; }
+      el('gif-box').classList.remove('hidden');
+      el('gif-preview').classList.add('hidden');
+      el('gif-link').classList.add('hidden');
+      // Salin data sesi sekarang, agar GIF tetap masuk ke member yang benar
+      // walaupun operator sudah menekan "Member Berikutnya".
+      const sesi = sesiParam || ambilSesi();
+      const masihSesiIni = function() { return sessionState.memberFolderId === sesi.memberFolderId; };
+      try {
+        status.textContent = 'Menyiapkan GIF...';
+        if (!gifLib) gifLib = await import('https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js');
+
+        const GW = Math.round(G.width || 960);
+        const GH = Math.round(GW * (appConfig.printHeight || 1200) / (appConfig.printWidth || 1800));
+        const cvs = document.createElement('canvas');
+        cvs.width = GW; cvs.height = GH;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true });
+
+        const frames = [];
+        for (let n = 1; n <= 3; n++) {
+          status.textContent = 'Menyusun frame ' + n + ' dari 3...';
+          const img = await loadImg(sesi.fotos[n - 1]);
+          await composeCard(ctx, GW, GH, img, sesi);
+          const data = ctx.getImageData(0, 0, GW, GH).data;
+          const palette = gifLib.quantize(data, 256);
+          frames.push({ index: gifLib.applyPalette(data, palette), palette: palette });
+          await wait(0);
+        }
+
+        status.textContent = 'Membuat GIF...';
+        const enc = gifLib.GIFEncoder();
+        const loops = Math.max(1, G.loops || 2);
+        for (let l = 0; l < loops; l++) {
+          frames.forEach(function(f) {
+            enc.writeFrame(f.index, GW, GH, { palette: f.palette, delay: G.perFotoMs || 1000, repeat: G.loopForever ? 0 : -1 });
+          });
+        }
+        enc.finish();
+        const b64 = bytesToBase64(enc.bytes());
+        const total = (loops * frames.length * (G.perFotoMs || 1000) / 1000);
+        if (masihSesiIni()) {
+          el('gif-preview').src = 'data:image/gif;base64,' + b64;
+          el('gif-preview').classList.remove('hidden');
+          status.textContent = 'Mengupload GIF (' + total + ' detik) ke Drive...';
+        }
+        const res = await callServer('uploadGifMember', {
+          memberFolderId: sesi.memberFolderId,
+          noAntrian: sesi.noAntrian,
+          kodeMember: sesi.kodeMember,
+          base64Data: b64
+        });
+        if (masihSesiIni()) {
+          status.textContent = 'Tersimpan: ' + res.fileName;
+          el('gif-link').href = res.fileUrl;
+          el('gif-link').classList.remove('hidden');
+        }
+      } catch (err) {
+        if (masihSesiIni()) {
+          status.textContent = 'Gagal membuat GIF: ' + err.message;
+          el('btn-gif-retry').classList.remove('hidden');
+        } else {
+          showBanner('GIF untuk ' + sesi.noAntrian + '_' + sesi.kodeMember + ' gagal dibuat: ' + err.message, 'error');
+        }
+      }
+    }
+
+    async function handleToStep3() {
+      const btn = el('btn-to-step-3');
+      btn.disabled = true;
+      el('btn-to-step-3-text').textContent = 'Membuat file cetak...';
+      try {
+        const cvs = el('canvas-cetak');
+        const W = appConfig.printWidth || 1800;
+        const H = appConfig.printHeight || 1200;
+        cvs.width = W; cvs.height = H;
+        const ctx = cvs.getContext('2d');
+
+        // Template ditaruh utuh di tengah kertas 4R (tidak ditarik / gepeng)
+        const f1 = await loadImg(sessionState.photos[1].dataUrl);
+        // Margin aman: mm -> px (sisi panjang kertas 4R = 152,4 mm)
+        const pxPerMm = Math.max(W, H) / 152.4;
+        const marginPx = Math.round((appConfig.printSafeMarginMm || 0) * pxPerMm);
+        await composeCard(ctx, W, H, f1, null, marginPx);
+
+        const cetakBase64 = cvs.toDataURL('image/jpeg', 0.92);
+        sessionState.cetakDataUrl = cetakBase64;
+        el('print-sheet-img').src = cetakBase64;
+
+        const res = await callServer('finalisasiCetakDanLog', {
+          noAntrian: sessionState.noAntrian,
+          kodeMember: sessionState.kodeMember,
+          memberFolderId: sessionState.memberFolderId,
+          cetakFolderId: sessionState.cetakFolderId,
+          cetakBase64: cetakBase64
+        });
+
+        el('step-3-session-label').textContent = sessionState.noAntrian + '_' + sessionState.kodeMember;
+        el('link-folder-member').href = res.memberFolderUrl;
+        if (res.pdfFileUrl) {
+          el('link-pdf-4r').href = res.pdfFileUrl;
+          el('link-pdf-4r').classList.remove('hidden');
+        } else {
+          el('link-pdf-4r').classList.add('hidden');
+        }
+        const qbox = el('qrcode-box');
+        qbox.innerHTML = '';
+        try {
+          new QRCode(qbox, { text: res.memberFolderUrl, width: 200, height: 200 });
+        } catch (e) {
+          qbox.textContent = 'QR gagal dimuat. Pakai link "Buka Folder Member".';
+        }
+        showBanner('', '');
+        goToStep(3);
+        prosesMedia(); // video + GIF berjalan di latar; operator bisa langsung cetak
+      } catch (err) {
+        showBanner('Gagal menyimpan file cetak: ' + err.message, 'error');
+      } finally {
+        updateStep2Btn();
+      }
+    }
+
+    /* ---------------- Daftar member ---------------- */
+    async function loadList() {
+      const tgl = el('list-date').value || appConfig.tanggalHariIni;
+      el('list-summary').textContent = 'Memuat...';
+      el('list-items').innerHTML = '';
+      try {
+        const res = await callServer('getDaftarMember', tgl);
+        listCache = res.items || [];
+        renderList();
+      } catch (err) {
+        el('list-summary').textContent = 'Gagal memuat: ' + err.message;
+      }
+    }
+
+    function renderList() {
+      const q = String(el('list-search').value || '').trim().toUpperCase();
+      const items = listCache.filter(function(it) {
+        return !q || it.kodeMember.toUpperCase().indexOf(q) >= 0 || it.noAntrian.indexOf(q) >= 0;
+      });
+      el('list-summary').textContent = listCache.length + ' member sudah foto' + (q ? ' • ' + items.length + ' cocok' : '');
+      const box = el('list-items');
+      if (!items.length) {
+        box.innerHTML = '<p class="text-sm text-slate-500 text-center py-6">Belum ada data.</p>';
+        return;
+      }
+      box.innerHTML = items.map(function(it, i) {
+        return '<div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">' +
+          '<div class="flex items-center justify-between">' +
+            '<div><div class="text-base font-extrabold">No. ' + esc(it.noAntrian) + ' • ' + esc(it.kodeMember) + '</div>' +
+            '<div class="text-xs text-slate-500">Pukul ' + esc(it.jam) + '</div></div>' +
+          '</div>' +
+          '<div class="grid grid-cols-4 gap-2">' +
+            '<button data-list="qr" data-i="' + i + '" class="h-10 rounded-xl bg-white border border-slate-300 text-xs font-bold">QR Foto</button>' +
+            '<button data-list="print" data-i="' + i + '" class="h-10 rounded-xl bg-emerald-600 text-white text-xs font-bold">Cetak Ulang</button>' +
+            (it.pdfUrl
+              ? '<a href="' + esc(it.pdfUrl) + '" target="_blank" rel="noopener noreferrer" class="h-10 rounded-xl bg-white border border-emerald-600 text-emerald-700 text-xs font-bold flex items-center justify-center">PDF 4R</a>'
+              : '<span class="h-10 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold flex items-center justify-center">PDF -</span>') +
+            '<a href="' + esc(it.folderUrl) + '" target="_blank" rel="noopener noreferrer" class="h-10 rounded-xl bg-white border border-slate-300 text-xs font-bold flex items-center justify-center">Folder ↗</a>' +
+          '</div></div>';
+      }).join('');
+      box.querySelectorAll('button[data-list]').forEach(function(b) {
+        b.addEventListener('click', function() {
+          const it = items[parseInt(b.getAttribute('data-i'), 10)];
+          if (b.getAttribute('data-list') === 'qr') showQrModal(it);
+          else reprint(it, b);
+        });
+      });
+    }
+
+    function showQrModal(it) {
+      el('qr-modal-title').textContent = it.noAntrian + '_' + it.kodeMember;
+      const box = el('qr-modal-box');
+      box.innerHTML = '';
+      try { new QRCode(box, { text: it.folderUrl, width: 220, height: 220 }); }
+      catch (e) { box.textContent = 'QR gagal dimuat. Buka lewat tombol Folder.'; }
+      el('qr-modal').classList.remove('hidden');
+    }
+
+    async function reprint(it, btn) {
+      if (!it.cetakFileId) { showBanner('File cetak tidak ditemukan untuk ' + it.kodeMember, 'error'); return; }
+      const old = btn.textContent;
+      btn.textContent = 'Memuat...';
+      btn.disabled = true;
+      try {
+        const dataUrl = await callServer('getCetakDataUrl', it.cetakFileId);
+        const img = el('print-sheet-img');
+        img.onload = function() { window.print(); img.onload = null; };
+        img.src = dataUrl;
+      } catch (err) {
+        showBanner('Gagal memuat file cetak: ' + err.message, 'error');
+      } finally {
+        btn.textContent = old;
+        btn.disabled = false;
+      }
+    }
+
+    /* ---------------- Init ---------------- */
+    window.addEventListener('DOMContentLoaded', function() {
+      el('form-step-1').addEventListener('submit', handleStep1);
+      el('btn-back-step-1').addEventListener('click', function() { goToStep(1); });
+      el('btn-start-session').addEventListener('click', function() {
+        const first = nextEmptyPhoto(0) || 1;
+        openCamera(first, false);
+      });
+      el('btn-cam-shoot').addEventListener('click', shoot);
+      el('btn-cam-switch').addEventListener('click', switchCamera);
+      el('btn-cam-close').addEventListener('click', closeCamera);
+      el('btn-to-step-3').addEventListener('click', handleToStep3);
+      el('btn-cetak-sekarang').addEventListener('click', function() {
+        el('print-sheet-img').src = sessionState.cetakDataUrl;
+        window.print();
+      });
+      el('btn-member-berikutnya').addEventListener('click', function() {
+        el('input-member-code').value = '';
+        resetPhotos();
+        showBanner('', '');
+        goToStep(1);
+      });
+
+      el('btn-open-list').addEventListener('click', function() {
+        if (!el('list-date').value) el('list-date').value = appConfig.tanggalHariIni;
+        goToStep('list');
+        loadList();
+      });
+      el('btn-close-list').addEventListener('click', function() { goToStep(currentStep); });
+      el('btn-list-refresh').addEventListener('click', loadList);
+      el('list-date').addEventListener('change', loadList);
+      el('list-search').addEventListener('input', renderList);
+      el('btn-qr-close').addEventListener('click', function() { el('qr-modal').classList.add('hidden'); });
+      el('btn-gif-retry').addEventListener('click', function() { buatGif(); });
+      el('btn-video-retry').addEventListener('click', function() { buatVideo(); });
+
+      resetPhotos();
+      /* ---------- Pengaturan, install, offline ---------- */
+      function bukaSetup(pesan) {
+        const s = apiSettings();
+        el('setup-url').value = s.url;
+        el('setup-status').textContent = pesan || '';
+        el('setup-modal').classList.remove('hidden');
+      }
+      function muatKonfigurasi() {
+        return callServer('getClientConfig').then(function(cfg) {
+          if (cfg) {
+            Object.assign(appConfig, cfg);
+            frameImgCache = null;
+            el('header-date').textContent = cfg.tanggalHariIni || '';
+            el('app-title').textContent = cfg.appTitle || el('app-title').textContent;
+            el('regex-hint').textContent = cfg.memberCodeHint || '';
+          }
+          showBanner('', '');
+        }).catch(function(err) {
+          if (/URL API/.test(err.message)) bukaSetup(err.message);
+          else showBanner('Gagal memuat konfigurasi: ' + err.message, 'error');
+        });
+      }
+
+      el('btn-settings').addEventListener('click', function() { bukaSetup(''); });
+      el('btn-setup-close').addEventListener('click', function() { el('setup-modal').classList.add('hidden'); });
+      el('setup-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const s = { url: el('setup-url').value.trim() };
+        const st = el('setup-status');
+        if (!/^https:[/][/]script[.]google[.]com[/].+[/]exec$/.test(s.url)) {
+          st.textContent = 'URL harus berbentuk https://script.google.com/macros/s/.../exec';
+          return;
+        }
+        st.textContent = 'Menguji koneksi...';
+        el('btn-setup-save').disabled = true;
+        try {
+          await callServerWith(s, 'ping');
+          tulisLokal('pb_api_url', s.url);
+          st.textContent = 'Terhubung ✓';
+          el('setup-modal').classList.add('hidden');
+          muatKonfigurasi();
+        } catch (err) {
+          st.textContent = 'Gagal: ' + err.message;
+        } finally {
+          el('btn-setup-save').disabled = false;
+        }
+      });
+
+      let promptInstall = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        promptInstall = e;
+        el('btn-install').classList.remove('hidden');
+      });
+      el('btn-install').addEventListener('click', async function() {
+        if (!promptInstall) return;
+        promptInstall.prompt();
+        try { await promptInstall.userChoice; } catch (e) {}
+        promptInstall = null;
+        el('btn-install').classList.add('hidden');
+      });
+      window.addEventListener('appinstalled', function() { el('btn-install').classList.add('hidden'); });
+      window.addEventListener('offline', function() { showBanner('HP sedang offline. Foto tidak bisa diupload sampai internet kembali.', 'warn'); });
+      window.addEventListener('online', function() { showBanner('', ''); });
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(function() {});
+      }
+
+      const awal = apiSettings();
+      if (!awal.url) bukaSetup('Isi URL Web App untuk mulai.');
+      else muatKonfigurasi();
+    });
+  </script>
+</body>
+</html>
