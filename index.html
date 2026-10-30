@@ -77,8 +77,9 @@
       </div>
       <button id="btn-cam-close" type="button" class="px-4 h-11 rounded-xl bg-slate-800 text-sm font-bold">Tutup</button>
     </div>
-    <div class="relative flex-1 overflow-hidden">
+    <div id="camera-stage" class="relative flex-1 overflow-hidden" style="touch-action: none; position: relative; overflow: hidden; min-height: 0;">
       <video id="camera-video" autoplay playsinline muted></video>
+      <div id="zoom-badge" class="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 text-white text-sm font-extrabold">1.0x</div>
       <div id="camera-countdown" class="hidden absolute inset-0 flex items-center justify-center text-white text-9xl font-extrabold drop-shadow-lg"></div>
       <div id="camera-flash" class="hidden absolute inset-0 bg-white"></div>
     </div>
@@ -86,8 +87,14 @@
       <label class="block text-[11px] uppercase text-slate-400 font-semibold mb-1" for="camera-select">Pilih Kamera</label>
       <select id="camera-select" class="w-full h-12 px-3 rounded-xl bg-slate-800 text-white text-sm font-bold"></select>
     </div>
-    <div class="px-4 py-3">
-      <button id="btn-cam-shoot" type="button" class="w-full h-16 rounded-2xl bg-white text-slate-900 text-lg font-extrabold">📸 Jepret</button>
+    <div class="px-4 pt-3 flex items-center gap-2">
+      <button id="btn-zoom-out" type="button" aria-label="Perkecil" class="w-12 h-12 rounded-xl bg-slate-800 text-white text-2xl font-extrabold">−</button>
+      <input id="zoom-range" type="range" min="1" max="4" step="0.1" value="1" class="flex-1 accent-white">
+      <button id="btn-zoom-in" type="button" aria-label="Perbesar" class="w-12 h-12 rounded-xl bg-slate-800 text-white text-2xl font-extrabold">+</button>
+    </div>
+    <div class="px-4 py-3 grid grid-cols-4 gap-2">
+      <button id="btn-cam-native" type="button" class="col-span-1 h-16 rounded-2xl bg-slate-800 text-white text-[11px] leading-tight font-bold">📱 Kamera Bawaan HP</button>
+      <button id="btn-cam-shoot" type="button" class="col-span-3 h-16 rounded-2xl bg-white text-slate-900 text-lg font-extrabold">📸 Jepret</button>
     </div>
   </div>
 
@@ -235,14 +242,15 @@
       memberCodeHint: 'Gunakan 3–20 karakter huruf/angka/strip',
       printWidth: 1800,
       printHeight: 1200,
-      templateWidth: 1754,
-      templateHeight: 1240,
+      templateWidth: 1800,
+      templateHeight: 1200,
       canvasBgColor: '#FFFFFF',
       printSafeMarginMm: 3,
-      photoArea: { x: 36, y: 38, width: 1681, height: 1026 },
+      photoArea: { x: 30, y: 30, width: 1740, height: 1050 },
       fitMode: 'cover',
       photoBgColor: '#FFFFFF',
-      label: { show: true, text: '#{NO} - {KODE}', pixelFont: true, x: 98, y: 1158.5, align: 'left', fontSize: 38, maxWidth: 1220, color: '#D62D2D', bgColor: '' },
+      label: { show: true, text: '#{NO} - {KODE}', pixelFont: true, x: 34, y: 1140, align: 'left', fontSize: 32, maxWidth: 860, color: '#D62D2D', bgColor: '' },
+      label2: { show: true, text: 'BANDAR LAMPUNG - {TGL}', pixelFont: true, x: 1766, y: 1140, align: 'right', fontSize: 32, maxWidth: 860, color: '#D62D2D', bgColor: '' },
       countdownSeconds: 0,
       mirrorHasil: false,
       gif: { enabled: true, width: 960, perFotoMs: 1000, loops: 2, loopForever: false },
@@ -515,7 +523,8 @@
         if (d.deviceId === aktifId) o.selected = true;
         sel.appendChild(o);
       });
-      sel.parentNode.classList.toggle('hidden', cam.devices.length < 2);
+      if (!cam.devices.length) sel.parentNode.classList.add('hidden');
+      else sel.parentNode.classList.remove('hidden');
     }
 
     async function startStream(pilihId) {
@@ -540,7 +549,7 @@
       const st = track && track.getSettings ? track.getSettings() : {};
       isiPilihanKamera(st.deviceId);
       cam.mirror = st.facingMode ? st.facingMode === 'user' : true;
-      v.style.transform = cam.mirror ? 'scaleX(-1)' : 'none';
+      siapkanZoom();
     }
 
     async function openCamera(n, single) {
@@ -566,6 +575,75 @@
       el('input-file-' + n).click();
     }
 
+    /* ---------------- Zoom kamera ----------------
+       Pakai zoom optik/hardware kamera bila didukung; jika tidak, zoom digital
+       (pratinjau diperbesar dan hasil foto dipotong di tengah). */
+    const zoom = { nilai: 1, min: 1, max: 4, step: 0.1, hardware: false };
+
+    function trackVideo() { return cam.stream ? cam.stream.getVideoTracks()[0] : null; }
+
+    function terapkanTransform() {
+      const skala = zoom.hardware ? 1 : zoom.nilai;
+      el('camera-video').style.transform = (cam.mirror ? 'scaleX(-1) ' : '') + 'scale(' + skala + ')';
+    }
+
+    function siapkanZoom() {
+      const tr = trackVideo();
+      let caps = {};
+      try { caps = tr && tr.getCapabilities ? tr.getCapabilities() : {}; } catch (e) {}
+      if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+        zoom.hardware = true;
+        zoom.min = caps.zoom.min;
+        zoom.max = Math.min(caps.zoom.max, 10);
+        zoom.step = caps.zoom.step || 0.1;
+      } else {
+        zoom.hardware = false;
+        zoom.min = 1; zoom.max = 4; zoom.step = 0.1;
+      }
+      const r = el('zoom-range');
+      r.min = zoom.min; r.max = zoom.max; r.step = zoom.step;
+      aturZoom(zoom.nilai); // pertahankan zoom terakhir
+    }
+
+    async function aturZoom(nilai) {
+      const v = Math.min(Math.max(Number(nilai) || 1, zoom.min), zoom.max);
+      zoom.nilai = v;
+      el('zoom-range').value = v;
+      el('zoom-badge').textContent = v.toFixed(1) + 'x' + (zoom.hardware ? '' : ' digital');
+      if (zoom.hardware) {
+        try { await trackVideo().applyConstraints({ advanced: [{ zoom: v }] }); } catch (e) {}
+      }
+      terapkanTransform();
+    }
+
+    (function pasangPinch() {
+      let awalJarak = 0, awalZoom = 1;
+      const jarak = function(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); };
+      document.addEventListener('DOMContentLoaded', function() {
+        const st = el('camera-stage');
+        st.addEventListener('touchstart', function(e) {
+          if (e.touches.length === 2) { awalJarak = jarak(e.touches); awalZoom = zoom.nilai; }
+        }, { passive: true });
+        st.addEventListener('touchmove', function(e) {
+          if (e.touches.length === 2 && awalJarak) {
+            e.preventDefault();
+            aturZoom(awalZoom * jarak(e.touches) / awalJarak);
+          }
+        }, { passive: false });
+        st.addEventListener('touchend', function() { awalJarak = 0; });
+      });
+    })();
+
+    function pakaiKameraBawaan() {
+      const n = cam.target;
+      closeCamera();
+      const inp = el('input-file-' + n);
+      inp.value = '';
+      inp.setAttribute('capture', 'environment'); // langsung buka aplikasi kamera HP
+      inp.click();
+      setTimeout(function() { inp.removeAttribute('capture'); }, 1000);
+    }
+
     function closeCamera() {
       stopStream();
       el('camera-modal').classList.add('hidden');
@@ -587,13 +665,17 @@
 
       const v = el('camera-video');
       const w = v.videoWidth, h = v.videoHeight;
-      const scale = Math.max(w, h) > 1600 ? 1600 / Math.max(w, h) : 1;
+      // Zoom digital: ambil bagian tengah sesuai besar zoom
+      const dz = zoom.hardware ? 1 : zoom.nilai;
+      const sw = w / dz, sh = h / dz;
+      const sx = (w - sw) / 2, sy = (h - sh) / 2;
+      const scale = Math.max(sw, sh) > 1600 ? 1600 / Math.max(sw, sh) : 1;
       const cvs = document.createElement('canvas');
-      cvs.width = Math.round(w * scale);
-      cvs.height = Math.round(h * scale);
+      cvs.width = Math.round(sw * scale);
+      cvs.height = Math.round(sh * scale);
       const ctx = cvs.getContext('2d');
       if (cam.mirror && appConfig.mirrorHasil) { ctx.translate(cvs.width, 0); ctx.scale(-1, 1); }
-      ctx.drawImage(v, 0, 0, cvs.width, cvs.height);
+      ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cvs.width, cvs.height);
       const dataUrl = cvs.toDataURL('image/jpeg', 0.85);
 
       const fl = el('camera-flash');
@@ -706,7 +788,16 @@
     }
 
     async function drawLabel(ctx, t, sesi) {
-      const L0 = appConfig.label;
+      const daftar = [appConfig.label, appConfig.label2];
+      for (let i = 0; i < daftar.length; i++) await drawSatuLabel(ctx, t, sesi, daftar[i]);
+    }
+
+    function formatTgl(iso) {
+      const p = String(iso || '').slice(0, 10).split('-');
+      return p.length === 3 ? p[2] + ':' + p[1] + ':' + p[0] : String(iso || '');
+    }
+
+    async function drawSatuLabel(ctx, t, sesi, L0) {
       if (!L0 || !L0.show) return;
       const L = Object.assign({}, L0, {
         x: t.ox + L0.x * t.s,
@@ -718,7 +809,8 @@
       const text = String(L.text || '')
         .split('{NO}').join(sesi.noAntrian)
         .split('{KODE}').join(sesi.kodeMember)
-        .split('{TANGGAL}').join(sessionState.tanggal || appConfig.tanggalHariIni);
+        .split('{TANGGAL}').join(sessionState.tanggal || appConfig.tanggalHariIni)
+        .split('{TGL}').join(formatTgl(sesi.tanggal || sessionState.tanggal || appConfig.tanggalHariIni));
       if (L.pixelFont) {
         // fontSize = tinggi huruf (7 unit). Dikecilkan otomatis bila melebihi maxWidth.
         let unit = L.fontSize / 7;
@@ -1215,6 +1307,10 @@
       });
       el('btn-cam-shoot').addEventListener('click', shoot);
       el('camera-select').addEventListener('change', gantiKamera);
+      el('zoom-range').addEventListener('input', function(e) { aturZoom(e.target.value); });
+      el('btn-zoom-in').addEventListener('click', function() { aturZoom(zoom.nilai + 0.5); });
+      el('btn-zoom-out').addEventListener('click', function() { aturZoom(zoom.nilai - 0.5); });
+      el('btn-cam-native').addEventListener('click', pakaiKameraBawaan);
       el('btn-cam-close').addEventListener('click', closeCamera);
       el('btn-to-step-3').addEventListener('click', handleToStep3);
       el('btn-cetak-sekarang').addEventListener('click', function() { cetakGambar(sessionState.cetakList.slice(0, 1)); });
