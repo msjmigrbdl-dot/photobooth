@@ -27,11 +27,13 @@
     .flash { animation: flash 0.35s ease-out; }
     @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
     @page { size: 6in 4in; margin: 0; }
+    .print-page { width: 6in; height: 4in; overflow: hidden; break-after: page; page-break-after: always; }
+    .print-page:last-child { break-after: auto; page-break-after: auto; }
+    .print-page img { display: block; width: 100%; height: 100%; object-fit: contain; }
     @media print {
-      body * { visibility: hidden; }
-      #print-sheet-area, #print-sheet-area * { visibility: visible; }
-      #print-sheet-area { position: fixed; inset: 0; width: 100vw; height: 100vh; display: flex !important; align-items: center; justify-content: center; background: #fff; }
-      #print-sheet-img { width: 100%; height: 100%; object-fit: contain; }
+      html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; min-height: 0 !important; }
+      body > *:not(#print-sheet-area) { display: none !important; }
+      #print-sheet-area { display: block !important; }
     }
   </style>
 </head>
@@ -53,7 +55,18 @@
     </form>
   </div>
 
-  <div id="print-sheet-area" class="hidden"><img id="print-sheet-img" alt="File Cetak 4R"></div>
+  <div id="print-sheet-area" class="hidden"></div>
+
+  <!-- MODAL CETAK ULANG -->
+  <div id="reprint-modal" class="hidden fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-5 w-full max-w-sm space-y-3">
+      <div id="reprint-title" class="text-lg font-extrabold text-center">Cetak Ulang</div>
+      <p class="text-xs text-slate-500 text-center">Ketuk satu foto untuk mencetak foto itu saja.</p>
+      <div id="reprint-thumbs" class="grid grid-cols-3 gap-2"></div>
+      <button id="btn-reprint-all" type="button" class="w-full h-12 rounded-xl bg-emerald-600 text-white font-extrabold">🖨️ Cetak Semua</button>
+      <button id="btn-reprint-close" type="button" class="w-full h-11 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold">Tutup</button>
+    </div>
+  </div>
 
   <!-- MODAL KAMERA LIVE -->
   <div id="camera-modal" class="hidden fixed inset-0 z-50 bg-black flex flex-col">
@@ -69,9 +82,12 @@
       <div id="camera-countdown" class="hidden absolute inset-0 flex items-center justify-center text-white text-9xl font-extrabold drop-shadow-lg"></div>
       <div id="camera-flash" class="hidden absolute inset-0 bg-white"></div>
     </div>
-    <div class="grid grid-cols-4 gap-2 px-4 py-4">
-      <button id="btn-cam-switch" type="button" class="col-span-1 h-16 rounded-2xl bg-slate-800 text-white text-xs font-bold">🔄 Ganti Kamera</button>
-      <button id="btn-cam-shoot" type="button" class="col-span-3 h-16 rounded-2xl bg-white text-slate-900 text-lg font-extrabold">📸 Jepret</button>
+    <div class="px-4 pt-3">
+      <label class="block text-[11px] uppercase text-slate-400 font-semibold mb-1" for="camera-select">Pilih Kamera</label>
+      <select id="camera-select" class="w-full h-12 px-3 rounded-xl bg-slate-800 text-white text-sm font-bold"></select>
+    </div>
+    <div class="px-4 py-3">
+      <button id="btn-cam-shoot" type="button" class="w-full h-16 rounded-2xl bg-white text-slate-900 text-lg font-extrabold">📸 Jepret</button>
     </div>
   </div>
 
@@ -161,8 +177,9 @@
             <a id="link-folder-member" href="https://drive.google.com" target="_blank" rel="noopener noreferrer" class="text-xs font-bold text-blue-600 underline break-all">Buka Folder Member ↗</a>
           </div>
 
-          <div class="rounded-2xl overflow-hidden border border-slate-300 bg-slate-100 flex justify-center p-2">
-            <canvas id="canvas-cetak" width="1800" height="1200" class="w-full h-auto rounded-lg shadow-sm bg-white"></canvas>
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <div class="text-xs font-extrabold uppercase text-slate-500">3 Foto Bertemplate • ketuk untuk cetak satu</div>
+            <div id="cetak-thumbs" class="grid grid-cols-3 gap-2"></div>
           </div>
 
           <div id="video-box" class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
@@ -187,8 +204,7 @@
         </div>
 
         <div class="space-y-3">
-          <button id="btn-cetak-sekarang" type="button" class="w-full h-16 rounded-2xl bg-emerald-600 active:bg-emerald-700 text-white text-lg font-extrabold shadow-md">🖨️ Cetak Sekarang</button>
-          <a id="link-pdf-4r" href="#" target="_blank" rel="noopener noreferrer" class="hidden w-full h-14 rounded-2xl bg-white border-2 border-emerald-600 text-emerald-700 text-base font-extrabold flex items-center justify-center">📄 Buka PDF 4R (cetak dari Drive)</a>
+          <button id="btn-cetak-sekarang" type="button" class="w-full h-16 rounded-2xl bg-emerald-600 active:bg-emerald-700 text-white text-lg font-extrabold shadow-md">🖨️ Cetak Semua (3 Foto)</button>
           <button id="btn-member-berikutnya" type="button" class="btn-primary w-full h-16 rounded-2xl text-lg font-extrabold shadow-md">🔄 Member Berikutnya</button>
         </div>
       </section>
@@ -227,7 +243,7 @@
       fitMode: 'cover',
       photoBgColor: '#FFFFFF',
       label: { show: true, text: '#{NO} - {KODE}', x: 1710, y: 1112, align: 'right', fontFamily: 'Roboto Mono', fontSize: 26, fontWeight: '400', color: '#D62D2D', bgColor: '', bgPadding: 10, bgRadius: 8 },
-      countdownSeconds: 3,
+      countdownSeconds: 0,
       mirrorHasil: false,
       gif: { enabled: true, width: 960, perFotoMs: 1000, loops: 2, loopForever: false },
       video: { enabled: true, width: 1280, perFotoMs: 1000, loops: 2, fps: 30, bitrate: 5000000 },
@@ -237,7 +253,7 @@
 
     const sessionState = {
       tanggal: '', noAntrian: '', kodeMember: '',
-      memberFolderId: '', memberFolderUrl: '', cetakFolderId: '', cetakDataUrl: '',
+      memberFolderId: '', memberFolderUrl: '', cetakFolderId: '', cetakList: [],
       photos: { 1: {}, 2: {}, 3: {} }
     };
 
@@ -480,28 +496,51 @@
       cam.stream = null;
     }
 
-    async function startStream() {
+    /* Kamera yang dipilih diingat di perangkat ini (kamera HP, webcam USB, kamera DSLR lewat capture card, dll). */
+    function kameraTersimpan() { try { return localStorage.getItem('pb_camera') || ''; } catch (e) { return ''; } }
+    function simpanKamera(id) { try { localStorage.setItem('pb_camera', id || ''); } catch (e) {} }
+
+    async function daftarKamera() {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      cam.devices = all.filter(function(d) { return d.kind === 'videoinput'; });
+    }
+
+    function isiPilihanKamera(aktifId) {
+      const sel = el('camera-select');
+      sel.innerHTML = '';
+      cam.devices.forEach(function(d, i) {
+        const o = document.createElement('option');
+        o.value = d.deviceId;
+        o.textContent = d.label || ('Kamera ' + (i + 1));
+        if (d.deviceId === aktifId) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.parentNode.classList.toggle('hidden', cam.devices.length < 2);
+    }
+
+    async function startStream(pilihId) {
       stopStream();
-      const video = { width: { ideal: 1920 }, height: { ideal: 1440 } };
-      const dev = cam.devices[cam.deviceIndex];
-      if (dev && dev.deviceId) video.deviceId = { exact: dev.deviceId };
-      else video.facingMode = 'user';
-      cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: video });
+      const target = pilihId || kameraTersimpan();
+      const ukuran = { width: { ideal: 1920 }, height: { ideal: 1440 } };
+      const video = Object.assign({}, ukuran, target ? { deviceId: { exact: target } } : { facingMode: 'user' });
+      try {
+        cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: video });
+      } catch (err) {
+        if (!target) throw err;
+        // Kamera yang tersimpan tidak ditemukan (mis. kabel dicabut): pakai kamera bawaan
+        simpanKamera('');
+        cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: Object.assign({}, ukuran, { facingMode: 'user' }) });
+      }
       const v = el('camera-video');
       v.srcObject = cam.stream;
       await v.play();
 
-      if (!cam.devices.length) {
-        const all = await navigator.mediaDevices.enumerateDevices();
-        cam.devices = all.filter(function(d) { return d.kind === 'videoinput'; });
-      }
+      await daftarKamera(); // nama kamera baru terbaca setelah izin diberikan
       const track = cam.stream.getVideoTracks()[0];
       const st = track && track.getSettings ? track.getSettings() : {};
-      const idx = cam.devices.findIndex(function(d) { return d.deviceId === st.deviceId; });
-      if (idx >= 0) cam.deviceIndex = idx;
+      isiPilihanKamera(st.deviceId);
       cam.mirror = st.facingMode ? st.facingMode === 'user' : true;
       v.style.transform = cam.mirror ? 'scaleX(-1)' : 'none';
-      el('btn-cam-switch').classList.toggle('invisible', cam.devices.length < 2);
     }
 
     async function openCamera(n, single) {
@@ -577,10 +616,10 @@
       }
     }
 
-    async function switchCamera() {
-      if (cam.devices.length < 2) return;
-      cam.deviceIndex = (cam.deviceIndex + 1) % cam.devices.length;
-      try { await startStream(); } catch (err) { showBanner('Gagal ganti kamera: ' + err.message, 'error'); }
+    async function gantiKamera(e) {
+      const id = e.target.value;
+      simpanKamera(id);
+      try { await startStream(id); } catch (err) { showBanner('Gagal membuka kamera: ' + err.message, 'error'); }
     }
 
     /* ---------------- Langkah 1 ---------------- */
@@ -933,44 +972,79 @@
       }
     }
 
+    /* ---------------- Cetak (1 halaman 4R per foto) ---------------- */
+    function cetakGambar(list) {
+      if (!list || !list.length) { showBanner('Belum ada file cetak.', 'error'); return; }
+      const area = el('print-sheet-area');
+      area.innerHTML = '';
+      const tunggu = list.map(function(src) {
+        const page = document.createElement('div');
+        page.className = 'print-page';
+        const im = document.createElement('img');
+        im.alt = 'Cetak 4R';
+        page.appendChild(im);
+        area.appendChild(page);
+        return new Promise(function(res) { im.onload = res; im.onerror = res; im.src = src; });
+      });
+      Promise.all(tunggu).then(function() { setTimeout(function() { window.print(); }, 50); });
+    }
+
+    function renderThumbs(box, list) {
+      box.innerHTML = '';
+      list.forEach(function(src, i) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rounded-xl overflow-hidden border border-slate-300 bg-white text-[11px] font-bold text-slate-700';
+        const im = document.createElement('img');
+        im.src = src;
+        im.alt = 'Foto ' + (i + 1);
+        im.className = 'w-full h-auto block';
+        const cap = document.createElement('div');
+        cap.className = 'py-1';
+        cap.textContent = '🖨️ Foto ' + (i + 1);
+        b.appendChild(im);
+        b.appendChild(cap);
+        b.addEventListener('click', function() { cetakGambar([src]); });
+        box.appendChild(b);
+      });
+    }
+
     async function handleToStep3() {
       const btn = el('btn-to-step-3');
       btn.disabled = true;
       el('btn-to-step-3-text').textContent = 'Membuat file cetak...';
       try {
-        const cvs = el('canvas-cetak');
         const W = appConfig.printWidth || 1800;
         const H = appConfig.printHeight || 1200;
+        const cvs = document.createElement('canvas');
         cvs.width = W; cvs.height = H;
         const ctx = cvs.getContext('2d');
-
-        // Template ditaruh utuh di tengah kertas 4R (tidak ditarik / gepeng)
-        const f1 = await loadImg(sessionState.photos[1].dataUrl);
         // Margin aman: mm -> px (sisi panjang kertas 4R = 152,4 mm)
         const pxPerMm = Math.max(W, H) / 152.4;
         const marginPx = Math.round((appConfig.printSafeMarginMm || 0) * pxPerMm);
-        await composeCard(ctx, W, H, f1, null, marginPx);
 
-        const cetakBase64 = cvs.toDataURL('image/jpeg', 0.92);
-        sessionState.cetakDataUrl = cetakBase64;
-        el('print-sheet-img').src = cetakBase64;
+        // Ketiga foto masing-masing dibuat dengan template (1 file 4R per foto)
+        const cetakList = [];
+        for (let n = 1; n <= 3; n++) {
+          el('btn-to-step-3-text').textContent = 'Membuat file cetak ' + n + ' dari 3...';
+          const img = await loadImg(sessionState.photos[n].dataUrl);
+          await composeCard(ctx, W, H, img, null, marginPx);
+          cetakList.push(cvs.toDataURL('image/jpeg', 0.92));
+        }
+        sessionState.cetakList = cetakList;
+        renderThumbs(el('cetak-thumbs'), cetakList);
 
+        el('btn-to-step-3-text').textContent = 'Menyimpan ke Drive...';
         const res = await callServer('finalisasiCetakDanLog', {
           noAntrian: sessionState.noAntrian,
           kodeMember: sessionState.kodeMember,
           memberFolderId: sessionState.memberFolderId,
           cetakFolderId: sessionState.cetakFolderId,
-          cetakBase64: cetakBase64
+          cetakList: cetakList
         });
 
         el('step-3-session-label').textContent = sessionState.noAntrian + '_' + sessionState.kodeMember;
         el('link-folder-member').href = res.memberFolderUrl;
-        if (res.pdfFileUrl) {
-          el('link-pdf-4r').href = res.pdfFileUrl;
-          el('link-pdf-4r').classList.remove('hidden');
-        } else {
-          el('link-pdf-4r').classList.add('hidden');
-        }
         const qbox = el('qrcode-box');
         qbox.innerHTML = '';
         try {
@@ -1019,12 +1093,9 @@
             '<div><div class="text-base font-extrabold">No. ' + esc(it.noAntrian) + ' • ' + esc(it.kodeMember) + '</div>' +
             '<div class="text-xs text-slate-500">Pukul ' + esc(it.jam) + '</div></div>' +
           '</div>' +
-          '<div class="grid grid-cols-4 gap-2">' +
+          '<div class="grid grid-cols-3 gap-2">' +
             '<button data-list="qr" data-i="' + i + '" class="h-10 rounded-xl bg-white border border-slate-300 text-xs font-bold">QR Foto</button>' +
             '<button data-list="print" data-i="' + i + '" class="h-10 rounded-xl bg-emerald-600 text-white text-xs font-bold">Cetak Ulang</button>' +
-            (it.pdfUrl
-              ? '<a href="' + esc(it.pdfUrl) + '" target="_blank" rel="noopener noreferrer" class="h-10 rounded-xl bg-white border border-emerald-600 text-emerald-700 text-xs font-bold flex items-center justify-center">PDF 4R</a>'
-              : '<span class="h-10 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold flex items-center justify-center">PDF -</span>') +
             '<a href="' + esc(it.folderUrl) + '" target="_blank" rel="noopener noreferrer" class="h-10 rounded-xl bg-white border border-slate-300 text-xs font-bold flex items-center justify-center">Folder ↗</a>' +
           '</div></div>';
       }).join('');
@@ -1046,16 +1117,18 @@
       el('qr-modal').classList.remove('hidden');
     }
 
+    let reprintList = [];
     async function reprint(it, btn) {
       if (!it.cetakFileId) { showBanner('File cetak tidak ditemukan untuk ' + it.kodeMember, 'error'); return; }
       const old = btn.textContent;
       btn.textContent = 'Memuat...';
       btn.disabled = true;
       try {
-        const dataUrl = await callServer('getCetakDataUrl', it.cetakFileId);
-        const img = el('print-sheet-img');
-        img.onload = function() { window.print(); img.onload = null; };
-        img.src = dataUrl;
+        reprintList = await callServer('getCetakSemua', it.cetakFileId);
+        el('reprint-title').textContent = 'Cetak Ulang No. ' + it.noAntrian + ' • ' + it.kodeMember;
+        renderThumbs(el('reprint-thumbs'), reprintList);
+        el('btn-reprint-all').textContent = '🖨️ Cetak Semua (' + reprintList.length + ' Foto)';
+        el('reprint-modal').classList.remove('hidden');
       } catch (err) {
         showBanner('Gagal memuat file cetak: ' + err.message, 'error');
       } finally {
@@ -1073,13 +1146,12 @@
         openCamera(first, false);
       });
       el('btn-cam-shoot').addEventListener('click', shoot);
-      el('btn-cam-switch').addEventListener('click', switchCamera);
+      el('camera-select').addEventListener('change', gantiKamera);
       el('btn-cam-close').addEventListener('click', closeCamera);
       el('btn-to-step-3').addEventListener('click', handleToStep3);
-      el('btn-cetak-sekarang').addEventListener('click', function() {
-        el('print-sheet-img').src = sessionState.cetakDataUrl;
-        window.print();
-      });
+      el('btn-cetak-sekarang').addEventListener('click', function() { cetakGambar(sessionState.cetakList); });
+      el('btn-reprint-all').addEventListener('click', function() { cetakGambar(reprintList); });
+      el('btn-reprint-close').addEventListener('click', function() { el('reprint-modal').classList.add('hidden'); });
       el('btn-member-berikutnya').addEventListener('click', function() {
         el('input-member-code').value = '';
         resetPhotos();
