@@ -23,7 +23,7 @@
     .btn-primary:active:not(:disabled) { background: var(--accent); transform: scale(0.985); }
     .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
     .step-pill-active { background: var(--primary); color: #fff; border-color: var(--primary); }
-    #camera-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    #camera-video { display: block; width: 100%; height: 100%; object-fit: cover; background: #000; }
     .flash { animation: flash 0.35s ease-out; }
     @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
     @page { size: 6in 4in; margin: 0; }
@@ -78,7 +78,11 @@
       <button id="btn-cam-close" type="button" class="px-4 h-11 rounded-xl bg-slate-800 text-sm font-bold">Tutup</button>
     </div>
     <div id="camera-stage" class="relative flex-1 overflow-hidden" style="touch-action: none; position: relative; overflow: hidden; min-height: 0;">
-      <video id="camera-video" autoplay playsinline muted></video>
+      <div id="camera-window" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden; background: #000;">
+        <video id="camera-video" autoplay playsinline muted></video>
+        <div id="camera-vignette" style="position: absolute; inset: 0; pointer-events: none;"></div>
+      </div>
+      <canvas id="camera-frame" style="position: absolute; left: 0; top: 0; pointer-events: none;"></canvas>
       <div id="zoom-badge" class="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/60 text-white text-sm font-extrabold">1.0x</div>
       <div id="camera-countdown" class="hidden absolute inset-0 flex items-center justify-center text-white text-9xl font-extrabold drop-shadow-lg"></div>
       <div id="camera-flash" class="hidden absolute inset-0 bg-white"></div>
@@ -92,6 +96,7 @@
       <input id="zoom-range" type="range" min="1" max="4" step="0.1" value="1" class="flex-1 accent-white">
       <button id="btn-zoom-in" type="button" aria-label="Perbesar" class="w-12 h-12 rounded-xl bg-slate-800 text-white text-2xl font-extrabold">+</button>
     </div>
+    <div id="filter-pills" class="px-4 pt-3 flex gap-2 overflow-x-auto"></div>
     <div class="px-4 py-3 grid grid-cols-4 gap-2">
       <button id="btn-cam-native" type="button" class="col-span-1 h-16 rounded-2xl bg-slate-800 text-white text-[11px] leading-tight font-bold">📱 Kamera Bawaan HP</button>
       <button id="btn-cam-shoot" type="button" class="col-span-3 h-16 rounded-2xl bg-white text-slate-900 text-lg font-extrabold">📸 Jepret</button>
@@ -159,6 +164,11 @@
 
           <button id="btn-start-session" type="button" class="btn-primary w-full h-16 rounded-2xl text-lg font-extrabold shadow-md">▶ Mulai Foto (3x berturut-turut)</button>
 
+          <div class="space-y-1">
+            <div class="text-xs font-extrabold uppercase text-slate-500">Filter Foto</div>
+            <div id="filter-pills-step2" class="flex gap-2 overflow-x-auto pb-1"></div>
+          </div>
+
           <div id="photo-cards" class="space-y-3"></div>
         </div>
 
@@ -199,7 +209,7 @@
             <button id="btn-video-retry" type="button" class="hidden w-full h-11 rounded-xl bg-slate-200 text-slate-800 text-sm font-extrabold">Buat Ulang Video</button>
           </div>
 
-          <div id="gif-box" class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+          <div id="gif-box" class="hidden rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
             <div class="flex items-center justify-between">
               <span class="text-xs font-extrabold uppercase text-slate-500">GIF Animasi 3 Foto</span>
               <a id="gif-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden text-xs font-bold text-blue-600 underline">Buka GIF ↗</a>
@@ -246,14 +256,16 @@
       templateHeight: 1200,
       canvasBgColor: '#FFFFFF',
       printSafeMarginMm: 3,
-      photoArea: { x: 30, y: 30, width: 1740, height: 1050 },
+      photoArea: { x: 30, y: 30, width: 1740, height: 1010 },
       fitMode: 'cover',
       photoBgColor: '#FFFFFF',
-      label: { show: true, text: '#{NO} - {KODE}', pixelFont: true, x: 34, y: 1140, align: 'left', fontSize: 32, maxWidth: 860, color: '#D62D2D', bgColor: '' },
-      label2: { show: true, text: 'BANDAR LAMPUNG - {TGL}', pixelFont: true, x: 1766, y: 1140, align: 'right', fontSize: 32, maxWidth: 860, color: '#D62D2D', bgColor: '' },
+      label: { show: true, text: '#{NO} - {KODE}', pixelFont: true, x: 190, y: 1120, align: 'left', fontSize: 28, maxWidth: 520, color: '#D62D2D', bgColor: '' },
+      label3: { show: true, text: '#indogrosirBDL', pixelFont: true, x: 900, y: 1120, align: 'center', fontSize: 28, maxWidth: 420, color: '#D62D2D', bgColor: '' },
+      label2: { show: true, text: 'BANDAR LAMPUNG - {TGL}', pixelFont: true, x: 1766, y: 1120, align: 'right', fontSize: 28, maxWidth: 680, color: '#D62D2D', bgColor: '' },
       countdownSeconds: 0,
       mirrorHasil: false,
-      gif: { enabled: true, width: 960, perFotoMs: 1000, loops: 2, loopForever: false },
+      gif: { enabled: false, width: 960, perFotoMs: 1000, loops: 2, loopForever: false },
+      qrFoto: { show: true, posisi: 'bingkai', x: 30, y: 1050, size: 140, padding: 0, inset: 0, radius: 0 },
       video: { enabled: true, width: 1280, perFotoMs: 1000, loops: 2, fps: 30, bitrate: 5000000 },
       frameDataUrl: null,
       tanggalHariIni: new Date().toISOString().slice(0, 10)
@@ -563,6 +575,9 @@
       el('camera-modal').classList.remove('hidden');
       try {
         await startStream();
+        terapkanPreviewFilter();
+        renderPilihanFilter();
+        await aturLayoutKamera();
       } catch (err) {
         closeCamera();
         fallbackToFile(n, 'Kamera live tidak bisa dibuka (' + (err.name || err.message) + ').');
@@ -759,12 +774,16 @@
 
     const PIXEL_FONT = {"0":[".###.","#...#","#...#","#.#.#","#...#","#...#",".###."],"1":[".#","##",".#",".#",".#",".#",".#"],"2":[".###.","#...#","....#","..##.",".#...","#....","#####"],"3":[".###.","#...#","....#","..##.","....#","#...#",".###."],"4":["...#.","..##.",".#.#.","#..#.","#####","...#.","...#."],"5":["#####","#....","####.","....#","....#","#...#",".###."],"6":[".###.","#...#","#....","####.","#...#","#...#",".###."],"7":["#####","....#","....#","...#.","..#..",".#...",".#..."],"8":[".###.","#...#","#...#",".###.","#...#","#...#",".###."],"9":[".###.","#...#","#...#",".####","....#","#...#",".###."],"A":[".###.","#...#","#...#","#####","#...#","#...#","#...#"],"B":["####.","#...#","#...#","####.","#...#","#...#","####."],"C":[".###.","#...#","#....","#....","#....","#...#",".###."],"D":["####.","#...#","#...#","#...#","#...#","#...#","####."],"E":["#####","#....","#....","####.","#....","#....","#####"],"F":["#####","#....","#....","####.","#....","#....","#...."],"G":[".###.","#...#","#....","#.###","#...#","#...#",".###."],"H":["#...#","#...#","#...#","#####","#...#","#...#","#...#"],"I":["###",".#.",".#.",".#.",".#.",".#.","###"],"J":["..###","...#.","...#.","...#.","...#.","#..#.",".##.."],"K":["#...#","#..#.","#.#..","##...","#.#..","#..#.","#...#"],"L":["#....","#....","#....","#....","#....","#....","#####"],"M":["#...#","##.##","#.#.#","#.#.#","#...#","#...#","#...#"],"N":["#...#","#...#","##..#","#.#.#","#..##","#...#","#...#"],"O":[".###.","#...#","#...#","#...#","#...#","#...#",".###."],"P":["####.","#...#","#...#","####.","#....","#....","#...."],"Q":[".###.","#...#","#...#","#...#","#.#.#","#..#.",".##.#"],"R":["####.","#...#","#...#","####.","#.#..","#..#.","#...#"],"S":[".####","#....","#....",".###.","....#","....#","####."],"T":["#####","..#..","..#..","..#..","..#..","..#..","..#.."],"U":["#...#","#...#","#...#","#...#","#...#","#...#",".###."],"V":["#...#","#...#","#...#","#...#","#...#",".#.#.","..#.."],"W":["#...#","#...#","#...#","#.#.#","#.#.#","#.#.#",".#.#."],"X":["#...#","#...#",".#.#.","..#..",".#.#.","#...#","#...#"],"Y":["#...#","#...#",".#.#.","..#..","..#..","..#..","..#.."],"Z":["#####","....#","...#.","..#..",".#...","#....","#####"],"#":[".#.#.",".#.#.","#####",".#.#.","#####",".#.#.",".#.#."],"-":["...","...","...","###","...","...","..."],"_":["....","....","....","....","....","....","####"],".":[".",".",".",".",".",".","#"],":":[".",".","#",".",".",".","#"],"/":["....#","....#","...#.","..#..",".#...","#....","#...."]," ":["..","..","..","..","..","..",".."]};
 
+    Object.assign(PIXEL_FONT, {"a":[".....",".....",".###.","....#",".####","#...#",".####","....."],"b":["#....","#....","####.","#...#","#...#","#...#","####.","....."],"c":[".....",".....",".###.","#....","#....","#...#",".###.","....."],"d":["....#","....#",".####","#...#","#...#","#...#",".####","....."],"e":[".....",".....",".###.","#...#","#####","#....",".###.","....."],"f":["..##.",".#..#",".#...","###..",".#...",".#...",".#...","....."],"g":[".....",".....",".####","#...#","#...#",".####","....#",".###."],"h":["#....","#....","#.##.","##..#","#...#","#...#","#...#","....."],"i":[".#.","...","##.",".#.",".#.",".#.","###","..."],"j":["...#","....","..##","...#","...#","...#","#..#",".##."],"k":["#....","#....","#..#.","#.#..","##...","#.#..","#..#.","....."],"l":["##.",".#.",".#.",".#.",".#.",".#.","###","..."],"m":[".....",".....","##.#.","#.#.#","#.#.#","#.#.#","#.#.#","....."],"n":[".....",".....","#.##.","##..#","#...#","#...#","#...#","....."],"o":[".....",".....",".###.","#...#","#...#","#...#",".###.","....."],"p":[".....",".....","####.","#...#","#...#","####.","#....","#...."],"q":[".....",".....",".####","#...#","#...#",".####","....#","....#"],"r":[".....",".....","#.##.","##..#","#....","#....","#....","....."],"s":[".....",".....",".####","#....",".###.","....#","####.","....."],"t":[".#...",".#...","###..",".#...",".#...",".#..#","..##.","....."],"u":[".....",".....","#...#","#...#","#...#","#..##",".##.#","....."],"v":[".....",".....","#...#","#...#","#...#",".#.#.","..#..","....."],"w":[".....",".....","#...#","#...#","#.#.#","#.#.#",".#.#.","....."],"x":[".....",".....","#...#",".#.#.","..#..",".#.#.","#...#","....."],"y":[".....",".....","#...#","#...#","#...#",".####","....#",".###."],"z":[".....",".....","#####","...#.","..#..",".#...","#####","....."]}); // huruf kecil (baris ke-8 = ekor huruf g, j, p, q, y)
+
+    function glyphPiksel(ch) { return PIXEL_FONT[ch] || PIXEL_FONT[ch.toUpperCase()] || PIXEL_FONT[' ']; }
+
     /* Huruf piksel 5x7 meniru gaya teks "BANDAR LAMPUNG / 07:11:2026" di template.
        unit = ukuran 1 piksel huruf (tinggi huruf = 7 unit, jarak antar huruf = 1 unit). */
     function lebarPixelText(text, unit) {
       let w = 0;
-      String(text).toUpperCase().split('').forEach(function(ch, i) {
-        const g = PIXEL_FONT[ch] || PIXEL_FONT[' '];
+      String(text).split('').forEach(function(ch, i) {
+        const g = glyphPiksel(ch);
         w += g[0].length * unit + (i ? unit : 0);
       });
       return w;
@@ -773,9 +792,9 @@
       const top = Math.round(yTengah - (7 * unit) / 2);
       let cx = x;
       ctx.fillStyle = warna;
-      String(text).toUpperCase().split('').forEach(function(ch) {
-        const g = PIXEL_FONT[ch] || PIXEL_FONT[' '];
-        for (let r = 0; r < 7; r++) {
+      String(text).split('').forEach(function(ch) {
+        const g = glyphPiksel(ch);
+        for (let r = 0; r < g.length; r++) {
           for (let c = 0; c < g[r].length; c++) {
             if (g[r][c] !== '#') continue;
             const x0 = Math.round(cx + c * unit), y0 = Math.round(top + r * unit);
@@ -788,7 +807,7 @@
     }
 
     async function drawLabel(ctx, t, sesi) {
-      const daftar = [appConfig.label, appConfig.label2];
+      const daftar = [appConfig.label, appConfig.label3, appConfig.label2];
       for (let i = 0; i < daftar.length; i++) await drawSatuLabel(ctx, t, sesi, daftar[i]);
     }
 
@@ -875,6 +894,170 @@
     }
 
     /** Gambar 1 kartu lengkap (latar, foto, bingkai, label) pada canvas W x H. */
+
+    /* ---------------- Filter foto (opsi saat ambil foto) ----------------
+       css/tepiCss = pratinjau di kamera; angka lainnya = proses pada hasil foto. */
+    const FILTERS = {
+      asli:       { nama: 'Tanpa Filter', none: true, css: 'none', tepiCss: 'none' },
+      klasik:     { nama: 'Polaroid Klasik', css: 'contrast(0.92) saturate(0.85) sepia(0.12) brightness(1.04)', tepiCss: 'inset 0 0 60px rgba(0,0,0,0.35)',
+                    kontras: 0.90, terang: 1.03, saturasi: 0.85, angkatHitam: 28, turunPutih: 8, hangat: 10, bayangan: [0, 8, 6], sorotan: [10, 4, -8], vignette: 0.25, grain: 6 },
+      instax:     { nama: 'Instax', css: 'contrast(1.06) saturate(0.88) hue-rotate(-5deg) brightness(0.99)', tepiCss: 'inset 0 0 3px rgba(0,0,0,0.6), inset 0 0 45px rgba(0,0,0,0.35)',
+                    kontras: 1.06, terang: 1.00, saturasi: 0.88, angkatHitam: 6, turunPutih: 36, bayangan: [14, 2, -12], sorotan: [-10, -2, 10],
+                    vignette: 0.12, tepi: { kuat: 0.15, lebar: 0.05, garis: 0.35, lebarGaris: 0.004 }, grain: 4 },
+      vintage:    { nama: 'Vintage Hangat', css: 'sepia(0.35) saturate(0.7) contrast(0.92) brightness(1.03)', tepiCss: 'inset 0 0 70px rgba(40,20,0,0.4)',
+                    kontras: 0.92, terang: 1.02, saturasi: 0.62, angkatHitam: 34, turunPutih: 14, hangat: 22, bayangan: [8, 2, -8], sorotan: [14, 6, -16], vignette: 0.32, grain: 9 },
+      hitamputih: { nama: 'Hitam Putih', css: 'grayscale(1) contrast(1.06)', tepiCss: 'inset 0 0 60px rgba(0,0,0,0.4)',
+                    hitamPutih: true, kontras: 1.06, terang: 1.0, angkatHitam: 22, turunPutih: 6, vignette: 0.30, grain: 10 },
+      cerah:      { nama: 'Cerah', css: 'contrast(1.14) saturate(1.25) brightness(1.03)', tepiCss: 'inset 0 0 50px rgba(0,0,0,0.25)',
+                    kontras: 1.14, terang: 1.03, saturasi: 1.25, angkatHitam: 10, turunPutih: 0, hangat: 8, bayangan: [0, 0, 6], sorotan: [6, 2, -4], vignette: 0.22, grain: 3 }
+    };
+
+    function terapkanFilter(ctx, x, y, w, h, F) {
+      if (!F || F.none) return;
+      x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
+      const img = ctx.getImageData(x, y, w, h), d = img.data;
+      const lift = F.angkatHitam || 0, turun = F.turunPutih || 0, k = F.kontras || 1, br = F.terang || 1;
+      const lut = new Uint8ClampedArray(256);
+      for (let i = 0; i < 256; i++) {
+        let v = ((i - 128) * k + 128) * br;
+        v = Math.max(0, Math.min(255, v));
+        lut[i] = lift + v * (255 - lift - turun) / 255;
+      }
+      const S = Math.min(w, h), T = F.tepi;
+      const tepi1 = function(dist) {
+        if (!T) return 1;
+        return Math.max(0, 1 - T.kuat * Math.exp(-dist / (T.lebar * S)) - T.garis * Math.exp(-dist / (T.lebarGaris * S)));
+      };
+      const fx = new Float32Array(w), fy = new Float32Array(h);
+      for (let i = 0; i < w; i++) fx[i] = tepi1(i) * tepi1(w - 1 - i);
+      for (let j = 0; j < h; j++) fy[j] = tepi1(j) * tepi1(h - 1 - j);
+      const cx = w / 2, cy = h / 2, rmax = Math.sqrt(cx * cx + cy * cy);
+      const sat = F.saturasi == null ? 1 : F.saturasi, hg = F.hangat || 0;
+      const sb = F.bayangan || [0, 0, 0], ss = F.sorotan || [0, 0, 0];
+      for (let py = 0; py < h; py++) {
+        for (let px = 0; px < w; px++) {
+          const i = (py * w + px) * 4;
+          let r = d[i], g = d[i + 1], b = d[i + 2];
+          const l = 0.299 * r + 0.587 * g + 0.114 * b;
+          if (F.hitamPutih) { r = g = b = l; }
+          else { r = l + (r - l) * sat; g = l + (g - l) * sat; b = l + (b - l) * sat; }
+          r = lut[Math.max(0, Math.min(255, r | 0))];
+          g = lut[Math.max(0, Math.min(255, g | 0))];
+          b = lut[Math.max(0, Math.min(255, b | 0))];
+          const t = l / 255;
+          r += hg + sb[0] * (1 - t) + ss[0] * t;
+          g += sb[1] * (1 - t) + ss[1] * t;
+          b += -hg + sb[2] * (1 - t) + ss[2] * t;
+          let f = fx[px] * fy[py];
+          if (F.vignette) {
+            const dx = px - cx, dy = py - cy;
+            f *= 1 - F.vignette * Math.pow(Math.sqrt(dx * dx + dy * dy) / rmax, 2.2);
+          }
+          r *= f; g *= f; b *= f;
+          if (F.grain) { const n = (Math.random() - 0.5) * 2 * F.grain; r += n; g += n; b += n; }
+          d[i] = r; d[i + 1] = g; d[i + 2] = b;
+        }
+      }
+      ctx.putImageData(img, x, y);
+    }
+
+    function filterAktif() { return FILTERS[sessionState.filter] ? sessionState.filter : 'asli'; }
+
+    function renderPilihanFilter() {
+      [['filter-pills', 'gelap'], ['filter-pills-step2', 'terang']].forEach(function(p) {
+        const box = el(p[0]);
+        if (!box) return;
+        box.innerHTML = '';
+        Object.keys(FILTERS).forEach(function(k) {
+          const aktif = filterAktif() === k;
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = FILTERS[k].nama;
+          b.className = 'shrink-0 px-3 h-10 rounded-full text-xs font-extrabold border ' + (p[1] === 'gelap'
+            ? (aktif ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-white border-slate-700')
+            : (aktif ? 'btn-primary border-transparent' : 'bg-slate-100 text-slate-700 border-slate-200'));
+          b.addEventListener('click', function() { pilihFilter(k); });
+          box.appendChild(b);
+        });
+      });
+    }
+
+    function pilihFilter(k) {
+      sessionState.filter = FILTERS[k] ? k : 'asli';
+      renderPilihanFilter();
+      terapkanPreviewFilter();
+    }
+
+    function terapkanPreviewFilter() {
+      const F = FILTERS[filterAktif()];
+      const v = el('camera-video'), vg = el('camera-vignette');
+      if (v) v.style.filter = F.css || 'none';
+      if (vg) vg.style.boxShadow = F.tepiCss || 'none';
+    }
+
+    /* ---------------- QR di sudut kiri foto ---------------- */
+    const qrCache = {};
+    function qrCanvas(url) {
+      if (!url || typeof QRCode === 'undefined') return null;
+      if (qrCache[url] !== undefined) return qrCache[url];
+      try {
+        const div = document.createElement('div');
+        new QRCode(div, { text: url, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.L });
+        qrCache[url] = div.querySelector('canvas') || null;
+      } catch (e) { qrCache[url] = null; }
+      return qrCache[url];
+    }
+
+    function gambarQRKartu(ctx, t, sesi) {
+      const Q = appConfig.qrFoto;
+      if (!Q || !Q.show) return;
+      const qc = qrCanvas(sesi && sesi.memberFolderUrl);
+      if (!qc) return;
+      const A = appConfig.photoArea;
+      const size = Q.size * t.s, pad = (Q.padding || 0) * t.s, inset = (Q.inset || 0) * t.s;
+      let x = t.ox + A.x * t.s + inset;
+      let y = Q.posisi === 'kiri-atas' ? t.oy + A.y * t.s + inset : t.oy + (A.y + A.height) * t.s - inset - size;
+      if (Q.posisi === 'bingkai') { x = t.ox + Q.x * t.s; y = t.oy + Q.y * t.s; } // di tepi putih bingkai
+      ctx.save();
+      ctx.fillStyle = '#FFFFFF';
+      roundRect(ctx, x, y, size, size, (Q.radius || 0) * t.s);
+      ctx.fill();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(qc, x + pad, y + pad, size - 2 * pad, size - 2 * pad);
+      ctx.restore();
+    }
+
+    /* ---------------- Bingkai di layar kamera ----------------
+       Tampilan kamera diletakkan tepat di lubang foto bingkai, jadi yang terlihat = yang tercetak. */
+    async function aturLayoutKamera() {
+      const st = el('camera-stage');
+      const W = st.clientWidth, H = st.clientHeight;
+      if (!W || !H) return;
+      const TW = appConfig.templateWidth || 1800, TH = appConfig.templateHeight || 1200, A = appConfig.photoArea;
+      const pad = 10;
+      const s = Math.min((W - 2 * pad) / TW, (H - 2 * pad) / TH);
+      const F = { x: (W - TW * s) / 2, y: (H - TH * s) / 2, w: TW * s, h: TH * s };
+      const R = { x: F.x + A.x * s, y: F.y + A.y * s, w: A.width * s, h: A.height * s };
+      const win = el('camera-window');
+      win.style.left = R.x + 'px'; win.style.top = R.y + 'px';
+      win.style.width = R.w + 'px'; win.style.height = R.h + 'px';
+
+      const k = window.devicePixelRatio || 1;
+      const c = el('camera-frame');
+      c.width = Math.round(W * k); c.height = Math.round(H * k);
+      c.style.width = W + 'px'; c.style.height = H + 'px';
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.fillStyle = appConfig.canvasBgColor || '#FFFFFF';
+      ctx.fillRect(F.x * k, F.y * k, F.w * k, F.h * k);
+      const fr = await getFrameImg();
+      if (fr) ctx.drawImage(fr, F.x * k, F.y * k, F.w * k, F.h * k);
+      ctx.clearRect(R.x * k, R.y * k, R.w * k, R.h * k);
+      const t = { s: s * k, ox: F.x * k, oy: F.y * k };
+      gambarQRKartu(ctx, t, sessionState);
+      await drawLabel(ctx, t, sessionState);
+    }
+
     async function composeCard(ctx, W, H, photoImg, sesi, marginPx) {
       ctx.fillStyle = appConfig.canvasBgColor || '#FFFFFF';
       ctx.fillRect(0, 0, W, H);
@@ -886,15 +1069,22 @@
       const t = { s: s, ox: (W - TW * s) / 2, oy: (H - TH * s) / 2 };
       const A = appConfig.photoArea;
       const area = { x: t.ox + A.x * s, y: t.oy + A.y * s, width: A.width * s, height: A.height * s };
+      const ss = sesi || sessionState;
+      const F = FILTERS[ss.filter] || null;
+      const foto = function() {
+        drawFitted(ctx, photoImg, area, appConfig.fitMode);
+        terapkanFilter(ctx, area.x, area.y, area.width, area.height, F);
+      };
       const fr = await getFrameImg();
       if (fr && frameMenutupFoto) {
         ctx.drawImage(fr, t.ox, t.oy, TW * s, TH * s);
-        drawFitted(ctx, photoImg, area, appConfig.fitMode);
+        foto();
       } else {
-        drawFitted(ctx, photoImg, area, appConfig.fitMode);
+        foto();
         if (fr) ctx.drawImage(fr, t.ox, t.oy, TW * s, TH * s);
       }
-      await drawLabel(ctx, t, sesi || sessionState);
+      gambarQRKartu(ctx, t, ss);
+      await drawLabel(ctx, t, ss);
     }
 
     /* ---------------- GIF animasi ---------------- */
@@ -911,6 +1101,9 @@
     function ambilSesi() {
       return {
         memberFolderId: sessionState.memberFolderId,
+        memberFolderUrl: sessionState.memberFolderUrl,
+        tanggal: sessionState.tanggal,
+        filter: filterAktif(),
         noAntrian: sessionState.noAntrian,
         kodeMember: sessionState.kodeMember,
         fotos: [1, 2, 3].map(function(n) { return sessionState.photos[n].dataUrl; })
@@ -1311,6 +1504,10 @@
       el('btn-zoom-in').addEventListener('click', function() { aturZoom(zoom.nilai + 0.5); });
       el('btn-zoom-out').addEventListener('click', function() { aturZoom(zoom.nilai - 0.5); });
       el('btn-cam-native').addEventListener('click', pakaiKameraBawaan);
+      window.addEventListener('resize', function() {
+        if (!el('camera-modal').classList.contains('hidden')) aturLayoutKamera();
+      });
+      renderPilihanFilter();
       el('btn-cam-close').addEventListener('click', closeCamera);
       el('btn-to-step-3').addEventListener('click', handleToStep3);
       el('btn-cetak-sekarang').addEventListener('click', function() { cetakGambar(sessionState.cetakList.slice(0, 1)); });
