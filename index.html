@@ -122,6 +122,7 @@
         </div>
         <div class="flex items-center gap-1.5">
           <button id="btn-install" type="button" class="hidden px-3 h-10 rounded-xl bg-emerald-600 text-white text-xs font-bold">📲 Install</button>
+          <span id="badge-latar" class="hidden px-2 py-2 rounded-xl bg-amber-100 text-amber-800 text-xs font-bold">⏳</span>
           <button id="btn-open-list" type="button" class="px-3 h-10 rounded-xl bg-slate-900 text-white text-xs font-bold">📋 Daftar</button>
           <button id="btn-settings" type="button" aria-label="Pengaturan" class="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 text-base font-bold">⚙️</button>
         </div>
@@ -201,7 +202,7 @@
 
           <div id="video-box" class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-extrabold uppercase text-slate-500">Video 6 Detik</span>
+              <span class="text-xs font-extrabold uppercase text-slate-500">Foto 2–3 &amp; Video (diproses di latar)</span>
               <a id="video-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden text-xs font-bold text-blue-600 underline">Buka Video ↗</a>
             </div>
             <p id="video-status" class="text-xs text-slate-600">-</p>
@@ -473,26 +474,12 @@
       updateStep2Btn();
       el('preview-img-' + n).src = dataUrl;
       el('preview-wrap-' + n).classList.remove('hidden');
-      el('status-foto-' + n).textContent = 'Mengupload ke Drive...';
-      el('badge-foto-' + n).textContent = '...';
-      try {
-        const res = await callServer('uploadFotoMember', {
-          memberFolderId: sessionState.memberFolderId,
-          noAntrian: sessionState.noAntrian,
-          kodeMember: sessionState.kodeMember,
-          nomorFoto: n,
-          base64Data: dataUrl
-        });
-        p.uploaded = true;
-        el('status-foto-' + n).textContent = 'Tersimpan: ' + res.fileName;
-        el('badge-foto-' + n).textContent = 'Siap ✓';
-      } catch (err) {
-        el('status-foto-' + n).textContent = 'Gagal upload: ' + err.message + ' (ambil ulang foto ini)';
-        el('badge-foto-' + n).textContent = 'Gagal';
-      } finally {
-        p.uploading = false;
-        updateStep2Btn();
-      }
+      // Foto tidak diupload di sini: versi berframe diupload setelah file cetak selesai (lebih cepat).
+      p.uploaded = true;
+      p.uploading = false;
+      el('status-foto-' + n).textContent = 'Siap (diupload setelah cetak)';
+      el('badge-foto-' + n).textContent = 'Siap ✓';
+      updateStep2Btn();
     }
 
     /* ---------------- Kamera live ---------------- */
@@ -1186,7 +1173,7 @@
         const total = per * frames.length * loops;
 
         const stream = cvs.captureStream(fps);
-        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: V.bitrate || 5000000 });
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: Math.min(V.bitrate || 2500000, 2500000) });
         const chunks = [];
         rec.ondataavailable = function(e) { if (e.data && e.data.size) chunks.push(e.data); };
         const selesai = new Promise(function(res) { rec.onstop = res; });
@@ -1362,6 +1349,61 @@
       });
     }
 
+    /* ---------------- Proses latar: foto 2, foto 3, video ----------------
+       Berjalan berurutan (antre) walaupun operator sudah lanjut ke member berikutnya. */
+    let antrianLatar = Promise.resolve();
+    let jumlahLatar = 0;
+    let jobTerakhir = null;
+
+    function updateBadgeLatar() {
+      const b = el('badge-latar');
+      if (!b) return;
+      b.textContent = '⏳ ' + jumlahLatar + ' proses';
+      b.classList.toggle('hidden', jumlahLatar === 0);
+    }
+
+    function jadwalkanLatar(sesi, kartu) {
+      jobTerakhir = { sesi: sesi, kartu: kartu };
+      jumlahLatar++;
+      updateBadgeLatar();
+      const masihSesiIni = function() { return sessionState.memberFolderId === sesi.memberFolderId; };
+      const tulis = function(msg) { if (masihSesiIni()) el('video-status').textContent = msg; };
+      if (masihSesiIni()) {
+        el('btn-video-retry').classList.add('hidden');
+        tulis('Menunggu giliran...');
+      }
+      antrianLatar = antrianLatar.then(async function() {
+        try {
+          for (let n = 2; n <= 3; n++) {
+            tulis('Menyimpan foto ' + n + ' berframe ke Drive...');
+            const data = await kartu(n);
+            if (masihSesiIni()) {
+              sessionState.cetakList[n - 1] = data;
+              renderThumbs(el('cetak-thumbs'), sessionState.cetakList.filter(Boolean), false);
+            }
+            await callServer('uploadFotoMember', {
+              memberFolderId: sesi.memberFolderId,
+              noAntrian: sesi.noAntrian,
+              kodeMember: sesi.kodeMember,
+              nomorFoto: n,
+              base64Data: data
+            });
+          }
+          await buatVideo(sesi);
+        } catch (err) {
+          if (masihSesiIni()) {
+            el('video-status').textContent = 'Gagal: ' + err.message;
+            el('btn-video-retry').classList.remove('hidden');
+          } else {
+            showBanner('Foto/video ' + sesi.noAntrian + '_' + sesi.kodeMember + ' gagal diupload: ' + err.message, 'error');
+          }
+        } finally {
+          jumlahLatar--;
+          updateBadgeLatar();
+        }
+      });
+    }
+
     async function handleToStep3() {
       const btn = el('btn-to-step-3');
       btn.disabled = true;
@@ -1369,31 +1411,29 @@
       try {
         const W = appConfig.printWidth || 1800;
         const H = appConfig.printHeight || 1200;
-        const cvs = document.createElement('canvas');
-        cvs.width = W; cvs.height = H;
-        const ctx = cvs.getContext('2d');
         // Margin aman: mm -> px (sisi panjang kertas 4R = 152,4 mm)
         const pxPerMm = Math.max(W, H) / 152.4;
         const marginPx = Math.round((appConfig.printSafeMarginMm || 0) * pxPerMm);
+        const sesi = ambilSesi();
+        const kartu = async function(n) {
+          const c = document.createElement('canvas');
+          c.width = W; c.height = H;
+          await composeCard(c.getContext('2d'), W, H, await loadImg(sesi.fotos[n - 1]), sesi, marginPx);
+          return c.toDataURL('image/jpeg', 0.92);
+        };
 
-        // Ketiga foto masing-masing dibuat dengan template (1 file 4R per foto)
-        const cetakList = [];
-        for (let n = 1; n <= 3; n++) {
-          el('btn-to-step-3-text').textContent = 'Membuat file cetak ' + n + ' dari 3...';
-          const img = await loadImg(sessionState.photos[n].dataUrl);
-          await composeCard(ctx, W, H, img, null, marginPx);
-          cetakList.push(cvs.toDataURL('image/jpeg', 0.92));
-        }
-        sessionState.cetakList = cetakList;
-        renderThumbs(el('cetak-thumbs'), cetakList, false);
+        // Foto 1 (yang dicetak) dibuat & disimpan lebih dulu
+        const cetak1 = await kartu(1);
+        sessionState.cetakList = [cetak1];
+        renderThumbs(el('cetak-thumbs'), [cetak1], false);
 
-        el('btn-to-step-3-text').textContent = 'Menyimpan ke Drive...';
+        el('btn-to-step-3-text').textContent = 'Menyimpan file cetak...';
         const res = await callServer('finalisasiCetakDanLog', {
           noAntrian: sessionState.noAntrian,
           kodeMember: sessionState.kodeMember,
           memberFolderId: sessionState.memberFolderId,
           cetakFolderId: sessionState.cetakFolderId,
-          cetakList: cetakList
+          cetakList: [cetak1]
         });
 
         el('step-3-session-label').textContent = sessionState.noAntrian + '_' + sessionState.kodeMember;
@@ -1407,7 +1447,7 @@
         }
         showBanner('', '');
         goToStep(3);
-        prosesMedia(); // video + GIF berjalan di latar; operator bisa langsung cetak
+        jadwalkanLatar(sesi, kartu); // foto 2, foto 3 & video diproses di latar; operator bisa langsung cetak
       } catch (err) {
         showBanner('Gagal menyimpan file cetak: ' + err.message, 'error');
       } finally {
@@ -1531,7 +1571,12 @@
       el('list-search').addEventListener('input', renderList);
       el('btn-qr-close').addEventListener('click', function() { el('qr-modal').classList.add('hidden'); });
       el('btn-gif-retry').addEventListener('click', function() { buatGif(); });
-      el('btn-video-retry').addEventListener('click', function() { buatVideo(); });
+      el('btn-video-retry').addEventListener('click', function() {
+        if (jobTerakhir) jadwalkanLatar(jobTerakhir.sesi, jobTerakhir.kartu);
+      });
+      window.addEventListener('beforeunload', function(e) {
+        if (jumlahLatar > 0) { e.preventDefault(); e.returnValue = ''; }
+      });
 
       resetPhotos();
       /* ---------- Pengaturan, install, offline ---------- */
