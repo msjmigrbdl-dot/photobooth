@@ -103,6 +103,30 @@
     </div>
   </div>
 
+  <!-- MODAL ATUR POSISI FOTO DI FRAME -->
+  <div id="adjust-modal" class="hidden fixed inset-0 z-50 bg-black flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 text-white">
+      <div>
+        <div class="text-[11px] uppercase text-slate-400 font-semibold">Atur Posisi di Frame</div>
+        <div id="adjust-title" class="text-lg font-extrabold">Foto 1</div>
+      </div>
+      <button id="btn-adjust-reset" type="button" class="px-4 h-11 rounded-xl bg-slate-800 text-sm font-bold">↺ Reset</button>
+    </div>
+    <div id="adjust-stage" class="relative flex-1 flex items-center justify-center p-3" style="min-height: 0;">
+      <canvas id="adjust-canvas" style="touch-action: none; cursor: grab; background: #fff;"></canvas>
+    </div>
+    <p class="px-4 text-center text-xs text-slate-300">Geser foto dengan jari / mouse. Cubit dua jari, scroll mouse, atau slider untuk zoom.</p>
+    <div class="px-4 pt-3 flex items-center gap-2">
+      <button id="btn-adjust-zoom-out" type="button" aria-label="Perkecil" class="w-12 h-12 rounded-xl bg-slate-800 text-white text-2xl font-extrabold">−</button>
+      <input id="adjust-zoom" type="range" min="1" max="3" step="0.01" value="1" class="flex-1 accent-white">
+      <button id="btn-adjust-zoom-in" type="button" aria-label="Perbesar" class="w-12 h-12 rounded-xl bg-slate-800 text-white text-2xl font-extrabold">+</button>
+    </div>
+    <div class="px-4 py-3 grid grid-cols-2 gap-2">
+      <button id="btn-adjust-cancel" type="button" class="h-14 rounded-2xl bg-slate-800 text-white font-bold">Batal</button>
+      <button id="btn-adjust-ok" type="button" class="h-14 rounded-2xl bg-white text-slate-900 text-lg font-extrabold">✓ Selesai</button>
+    </div>
+  </div>
+
   <!-- MODAL QR -->
   <div id="qr-modal" class="hidden fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl p-5 w-full max-w-xs text-center space-y-3">
@@ -164,6 +188,12 @@
           </div>
 
           <button id="btn-start-session" type="button" class="btn-primary w-full h-16 rounded-2xl text-lg font-extrabold shadow-md">▶ Mulai Foto (3x berturut-turut)</button>
+
+          <div class="space-y-1">
+            <div class="text-xs font-extrabold uppercase text-slate-500">Tata Letak Cetak</div>
+            <div id="layout-pills" class="flex gap-2 overflow-x-auto pb-1"></div>
+            <p id="layout-info" class="text-xs text-slate-500"></p>
+          </div>
 
           <div class="space-y-1">
             <div class="text-xs font-extrabold uppercase text-slate-500">Filter Foto</div>
@@ -420,7 +450,7 @@
         card.className = 'rounded-2xl border-2 border-slate-200 p-3.5 bg-slate-50 space-y-2.5';
         card.innerHTML =
           '<div class="flex justify-between items-center">' +
-            '<span class="text-sm font-extrabold">📸 Foto ' + n + (n === 1 ? ' (Dicetak 4R)' : '') + '</span>' +
+            '<span class="text-sm font-extrabold">📸 Foto ' + n + '</span>' +
             '<span id="badge-foto-' + n + '" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-200">0/1</span>' +
           '</div>' +
           '<p id="status-foto-' + n + '" class="text-xs text-slate-500">Belum diambil</p>' +
@@ -428,15 +458,17 @@
           '<input id="input-file-' + n + '" type="file" accept="image/*" class="hidden">' +
           '<div class="grid grid-cols-2 gap-2">' +
             '<button data-act="live" data-n="' + n + '" type="button" class="btn-primary h-12 rounded-xl text-sm font-extrabold">📷 Kamera Live</button>' +
-            '<button data-act="file" data-n="' + n + '" type="button" class="h-12 rounded-xl bg-slate-200 text-slate-800 text-sm font-extrabold">🖼️ Kamera HP / Galeri</button>' +
-          '</div>';
+            '<button data-act="file" data-n="' + n + '" type="button" class="h-12 rounded-xl bg-slate-200 text-slate-800 text-sm font-extrabold">🖼️ Upload / Kamera HP</button>' +
+          '</div>' +
+          '<button id="btn-adjust-' + n + '" data-act="adjust" data-n="' + n + '" type="button" class="hidden w-full h-11 rounded-xl bg-amber-100 text-amber-900 text-sm font-extrabold">✋ Atur Posisi di Frame</button>';
         wrap.appendChild(card);
         el('input-file-' + n).addEventListener('change', async function(e) {
           const f = e.target.files[0];
           if (!f) return;
           try {
             const dataUrl = await compressAndFixPhoto(f);
-            processPhoto(n, dataUrl);
+            await processPhoto(n, dataUrl);
+            bukaEditor(n); // foto dari galeri / kamera HP langsung bisa diatur posisinya
           } catch (err) {
             el('status-foto-' + n).textContent = 'Gagal membaca foto: ' + err.message;
           }
@@ -445,7 +477,9 @@
       wrap.querySelectorAll('button[data-act]').forEach(function(btn) {
         btn.addEventListener('click', function() {
           const n = parseInt(btn.getAttribute('data-n'), 10);
-          if (btn.getAttribute('data-act') === 'live') openCamera(n, true);
+          const act = btn.getAttribute('data-act');
+          if (act === 'live') openCamera(n, true);
+          else if (act === 'adjust') bukaEditor(n);
           else { el('input-file-' + n).value = ''; el('input-file-' + n).click(); }
         });
       });
@@ -475,6 +509,9 @@
       el('preview-img-' + n).src = dataUrl;
       el('preview-wrap-' + n).classList.remove('hidden');
       // Foto tidak diupload di sini: versi berframe diupload setelah file cetak selesai (lebih cepat).
+      p.adj = adjBawaan(); // foto baru: posisi kembali ke tengah
+      el('btn-adjust-' + n).classList.remove('hidden');
+      perbaruiPreview(n);
       p.uploaded = true;
       p.uploading = false;
       el('status-foto-' + n).textContent = 'Siap (diupload setelah cetak)';
@@ -734,18 +771,270 @@
     }
 
     /* ---------------- Langkah 3: komposisi 4R ---------------- */
-    function drawFitted(ctx, img, area, mode) {
-      const sc = mode === 'cover'
+
+    /* ---------------- Atur posisi foto di dalam frame ----------------
+       adj = { zoom: >=1, ox: -1..1, oy: -1..1 } -> geser relatif terhadap sisa foto di luar frame. */
+    const editor = { n: 0, img: null, adj: null, awal: null, pointers: new Map(), jarakAwal: 0, zoomAwal: 1, geser: false, render: false, perlu: false };
+
+    function adjBawaan() { return { zoom: 1, ox: 0, oy: 0 }; }
+
+
+    /* ---------------- Tata letak STRIP 3 FOTO (4R berdiri, 1200 x 1800) ---------------- */
+    const STRIP_BAWAAN = {
+      width: 1200, height: 1800, bgColor: '#FFFFFF', color: '#D62D2D',
+      slots: [
+        { x: 40, y: 40, width: 1120, height: 494 },
+        { x: 40, y: 558, width: 1120, height: 494 },
+        { x: 40, y: 1076, width: 1120, height: 494 }
+      ],
+      qr: { x: 40, y: 1610, size: 150 },
+      labels: [
+        { text: '#indogrosirBDL', x: 215, y: 1640, align: 'left', fontSize: 36, maxWidth: 560 },
+        { text: '#{NO} - {KODE}', x: 215, y: 1700, align: 'left', fontSize: 30, maxWidth: 560 },
+        { text: 'BANDAR LAMPUNG', x: 1160, y: 1640, align: 'right', fontSize: 30, maxWidth: 380 },
+        { text: '{TGL}', x: 1160, y: 1700, align: 'right', fontSize: 30, maxWidth: 380 }
+      ]
+    };
+    function stripCfg() { return appConfig.strip || STRIP_BAWAAN; }
+    function layoutAktif() { return sessionState.layout === 'strip' ? 'strip' : 'polaroid'; }
+
+    function infoLayout(n) {
+      if (layoutAktif() === 'strip') {
+        const C = stripCfg();
+        return { TW: C.width, TH: C.height, A: C.slots[(n || 1) - 1] || C.slots[0], strip: true };
+      }
+      return { TW: appConfig.templateWidth || 1800, TH: appConfig.templateHeight || 1200, A: appConfig.photoArea, strip: false };
+    }
+
+    async function composeStrip(ctx, W, H, imgs, sesi, marginPx, adjusts) {
+      const C = stripCfg();
+      const ss = sesi || sessionState;
+      ctx.fillStyle = C.bgColor || '#FFFFFF';
+      ctx.fillRect(0, 0, W, H);
+      const m = Math.max(0, marginPx || 0);
+      const s = Math.min((W - 2 * m) / C.width, (H - 2 * m) / C.height);
+      const t = { s: s, ox: (W - C.width * s) / 2, oy: (H - C.height * s) / 2 };
+      const F = FILTERS[ss.filter] || null;
+      for (let i = 0; i < C.slots.length; i++) {
+        const S = C.slots[i];
+        const area = { x: t.ox + S.x * s, y: t.oy + S.y * s, width: S.width * s, height: S.height * s };
+        if (imgs[i]) {
+          drawFitted(ctx, imgs[i], area, 'cover', adjusts && adjusts[i]);
+          terapkanFilter(ctx, area.x, area.y, area.width, area.height, F);
+        } else {
+          ctx.fillStyle = '#E5E7EB';
+          ctx.fillRect(area.x, area.y, area.width, area.height);
+        }
+      }
+      const qc = C.qr ? qrCanvas(ss.memberFolderUrl) : null;
+      if (qc) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(qc, t.ox + C.qr.x * s, t.oy + C.qr.y * s, C.qr.size * s, C.qr.size * s);
+        ctx.restore();
+      }
+      const labels = C.labels || [];
+      for (let i = 0; i < labels.length; i++) {
+        await drawSatuLabel(ctx, t, ss, Object.assign({ show: true, pixelFont: true, color: C.color || '#D62D2D', bgColor: '' }, labels[i]));
+      }
+    }
+
+    function renderPilihanLayout() {
+      const box = el('layout-pills');
+      if (!box) return;
+      box.innerHTML = '';
+      [['polaroid', 'Polaroid'], ['strip', 'Strip 3 Foto']].forEach(function(p) {
+        const aktif = layoutAktif() === p[0];
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = p[1];
+        b.className = 'shrink-0 px-4 h-10 rounded-full text-xs font-extrabold border ' +
+          (aktif ? 'btn-primary border-transparent' : 'bg-slate-100 text-slate-700 border-slate-200');
+        b.addEventListener('click', function() {
+          sessionState.layout = p[0];
+          renderPilihanLayout();
+          [1, 2, 3].forEach(perbaruiPreview);
+        });
+        box.appendChild(b);
+      });
+      el('layout-info').textContent = layoutAktif() === 'strip'
+        ? 'Dicetak: ketiga foto dalam 1 strip (4R berdiri).'
+        : 'Dicetak: foto 1 dalam bingkai polaroid (4R mendatar).';
+    }
+
+    function putarJikaPotret(src) {
+      return loadImg(src).then(function(im) {
+        if (im.height <= im.width) return src;
+        // Strip berdiri diputar 90 derajat supaya tetap pas di setelan printer 4R mendatar
+        const c = document.createElement('canvas');
+        c.width = im.height; c.height = im.width;
+        const x = c.getContext('2d');
+        x.translate(c.width, 0);
+        x.rotate(Math.PI / 2);
+        x.drawImage(im, 0, 0);
+        return c.toDataURL('image/jpeg', 0.95);
+      }).catch(function() { return src; });
+    }
+
+    async function perbaruiPreview(n) {
+      const p = sessionState.photos[n];
+      if (!p || !p.dataUrl) return;
+      try {
+        const img = await loadImg(p.dataUrl);
+        const c = document.createElement('canvas');
+        if (layoutAktif() === 'strip') {
+          const S = stripCfg().slots[n - 1];
+          c.width = 900; c.height = Math.round(900 * S.height / S.width);
+          drawFitted(c.getContext('2d'), img, { x: 0, y: 0, width: c.width, height: c.height }, 'cover', p.adj);
+          terapkanFilter(c.getContext('2d'), 0, 0, c.width, c.height, FILTERS[sessionState.filter]);
+        } else {
+          const W = 900, H = Math.round(900 * (appConfig.printHeight || 1200) / (appConfig.printWidth || 1800));
+          c.width = W; c.height = H;
+          await composeCard(c.getContext('2d'), W, H, img, null, 0, p.adj);
+        }
+        el('preview-img-' + n).src = c.toDataURL('image/jpeg', 0.85);
+      } catch (e) {}
+    }
+
+    function ukuranEditor() {
+      const st = el('adjust-stage'), c = el('adjust-canvas');
+      const L = infoLayout(editor.n);
+      const rasio = L.strip ? L.TW / L.TH : (appConfig.printWidth || 1800) / (appConfig.printHeight || 1200);
+      let w = st.clientWidth - 24, h = st.clientHeight - 24;
+      if (w / h > rasio) w = h * rasio; else h = w / rasio;
+      const k = window.devicePixelRatio || 1;
+      c.style.width = Math.round(w) + 'px'; c.style.height = Math.round(h) + 'px';
+      c.width = Math.round(w * k); c.height = Math.round(h * k);
+    }
+
+    function renderEditor() {
+      editor.perlu = true;
+      if (editor.render) return;
+      editor.render = true;
+      requestAnimationFrame(async function() {
+        while (editor.perlu) {
+          editor.perlu = false;
+          const c = el('adjust-canvas');
+          // Saat sedang digeser, filter dimatikan sementara supaya gerakan lancar
+          const sesi = Object.assign({}, sessionState, { filter: editor.geser ? 'asli' : sessionState.filter });
+          try {
+            if (layoutAktif() === 'strip') {
+              const adjs = [1, 2, 3].map(function(k) { return k === editor.n ? editor.adj : (sessionState.photos[k].adj || null); });
+              await composeStrip(c.getContext('2d'), c.width, c.height, editor.imgs, sesi, 0, adjs);
+            } else {
+              await composeCard(c.getContext('2d'), c.width, c.height, editor.img, sesi, 0, editor.adj);
+            }
+          } catch (e) {}
+        }
+        editor.render = false;
+      });
+      el('adjust-zoom').value = editor.adj.zoom;
+    }
+
+    async function bukaEditor(n) {
+      const p = sessionState.photos[n];
+      if (!p || !p.dataUrl) { showBanner('Ambil foto ' + n + ' dulu sebelum mengatur posisinya.', 'warn'); return; }
+      editor.n = n;
+      editor.img = await loadImg(p.dataUrl);
+      editor.imgs = [];
+      for (let k = 1; k <= 3; k++) {
+        const d = sessionState.photos[k] && sessionState.photos[k].dataUrl;
+        editor.imgs.push(k === n ? editor.img : (d ? await loadImg(d) : null));
+      }
+      editor.adj = Object.assign(adjBawaan(), p.adj || {});
+      editor.awal = Object.assign({}, editor.adj);
+      el('adjust-title').textContent = 'Foto ' + n;
+      el('adjust-modal').classList.remove('hidden');
+      ukuranEditor();
+      renderEditor();
+    }
+
+    function tutupEditor(simpan) {
+      if (simpan && editor.n) {
+        sessionState.photos[editor.n].adj = Object.assign({}, editor.adj);
+        perbaruiPreview(editor.n);
+      }
+      el('adjust-modal').classList.add('hidden');
+      editor.pointers.clear();
+    }
+
+    function aturZoomEditor(z) {
+      editor.adj.zoom = Math.min(3, Math.max(1, Number(z) || 1));
+      renderEditor();
+    }
+
+    function geserEditor(dxCss, dyCss) {
+      const c = el('adjust-canvas');
+      const k = c.width / c.clientWidth;
+      const LI = infoLayout(editor.n), TW = LI.TW, TH = LI.TH, A = LI.A;
+      const s = Math.min(c.width / TW, c.height / TH);
+      const aw = A.width * s, ah = A.height * s, img = editor.img;
+      const sc = Math.max(aw / img.width, ah / img.height) * editor.adj.zoom;
+      const sisaX = Math.abs(img.width * sc - aw), sisaY = Math.abs(img.height * sc - ah);
+      if (sisaX > 0.5) editor.adj.ox = Math.max(-1, Math.min(1, editor.adj.ox + 2 * dxCss * k / sisaX));
+      if (sisaY > 0.5) editor.adj.oy = Math.max(-1, Math.min(1, editor.adj.oy + 2 * dyCss * k / sisaY));
+      renderEditor();
+    }
+
+    function pasangEditor() {
+      const c = el('adjust-canvas');
+      const jarak = function() {
+        const p = Array.from(editor.pointers.values());
+        return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      };
+      c.addEventListener('pointerdown', function(e) {
+        c.setPointerCapture(e.pointerId);
+        editor.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        editor.geser = true;
+        if (editor.pointers.size === 2) { editor.jarakAwal = jarak(); editor.zoomAwal = editor.adj.zoom; }
+      });
+      c.addEventListener('pointermove', function(e) {
+        const prev = editor.pointers.get(e.pointerId);
+        if (!prev) return;
+        const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+        editor.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (editor.pointers.size === 1) geserEditor(dx, dy);
+        else if (editor.pointers.size === 2 && editor.jarakAwal) aturZoomEditor(editor.zoomAwal * jarak() / editor.jarakAwal);
+      });
+      const lepas = function(e) {
+        editor.pointers.delete(e.pointerId);
+        if (editor.pointers.size < 2) editor.jarakAwal = 0;
+        if (!editor.pointers.size) { editor.geser = false; renderEditor(); }
+      };
+      c.addEventListener('pointerup', lepas);
+      c.addEventListener('pointercancel', lepas);
+      c.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        aturZoomEditor(editor.adj.zoom * (1 - e.deltaY * 0.0015));
+      }, { passive: false });
+      el('adjust-zoom').addEventListener('input', function(e) { aturZoomEditor(e.target.value); });
+      el('btn-adjust-zoom-in').addEventListener('click', function() { aturZoomEditor(editor.adj.zoom + 0.1); });
+      el('btn-adjust-zoom-out').addEventListener('click', function() { aturZoomEditor(editor.adj.zoom - 0.1); });
+      el('btn-adjust-reset').addEventListener('click', function() { editor.adj = adjBawaan(); renderEditor(); });
+      el('btn-adjust-ok').addEventListener('click', function() { tutupEditor(true); });
+      el('btn-adjust-cancel').addEventListener('click', function() { tutupEditor(false); });
+      window.addEventListener('resize', function() {
+        if (!el('adjust-modal').classList.contains('hidden')) { ukuranEditor(); renderEditor(); }
+      });
+    }
+
+    function drawFitted(ctx, img, area, mode, adj) {
+      const a = adj || {};
+      const z = Math.max(1, a.zoom || 1);
+      const sc = (mode === 'cover'
         ? Math.max(area.width / img.width, area.height / img.height)
-        : Math.min(area.width / img.width, area.height / img.height);
+        : Math.min(area.width / img.width, area.height / img.height)) * z;
       const dw = img.width * sc, dh = img.height * sc;
+      const ox = Math.max(-1, Math.min(1, a.ox || 0)), oy = Math.max(-1, Math.min(1, a.oy || 0));
       ctx.save();
       ctx.beginPath();
       ctx.rect(area.x, area.y, area.width, area.height);
       ctx.clip();
       ctx.fillStyle = appConfig.photoBgColor || '#FFFFFF';
       ctx.fillRect(area.x, area.y, area.width, area.height);
-      ctx.drawImage(img, area.x + (area.width - dw) / 2, area.y + (area.height - dh) / 2, dw, dh);
+      ctx.drawImage(img,
+        area.x + (area.width - dw) / 2 + ox * Math.abs(dw - area.width) / 2,
+        area.y + (area.height - dh) / 2 + oy * Math.abs(dh - area.height) / 2, dw, dh);
       ctx.restore();
     }
 
@@ -1020,7 +1309,13 @@
       const st = el('camera-stage');
       const W = st.clientWidth, H = st.clientHeight;
       if (!W || !H) return;
-      const TW = appConfig.templateWidth || 1800, TH = appConfig.templateHeight || 1200, A = appConfig.photoArea;
+      let TW = appConfig.templateWidth || 1800, TH = appConfig.templateHeight || 1200, A = appConfig.photoArea;
+      const modeStrip = layoutAktif() === 'strip';
+      if (modeStrip) {
+        const S = stripCfg().slots[(cam.target || 1) - 1] || stripCfg().slots[0];
+        TW = S.width + 80; TH = S.height + 80;
+        A = { x: 40, y: 40, width: S.width, height: S.height };
+      }
       const pad = 10;
       const s = Math.min((W - 2 * pad) / TW, (H - 2 * pad) / TH);
       const F = { x: (W - TW * s) / 2, y: (H - TH * s) / 2, w: TW * s, h: TH * s };
@@ -1037,15 +1332,17 @@
       ctx.clearRect(0, 0, c.width, c.height);
       ctx.fillStyle = appConfig.canvasBgColor || '#FFFFFF';
       ctx.fillRect(F.x * k, F.y * k, F.w * k, F.h * k);
-      const fr = await getFrameImg();
+      const fr = modeStrip ? null : await getFrameImg();
       if (fr) ctx.drawImage(fr, F.x * k, F.y * k, F.w * k, F.h * k);
       ctx.clearRect(R.x * k, R.y * k, R.w * k, R.h * k);
-      const t = { s: s * k, ox: F.x * k, oy: F.y * k };
-      gambarQRKartu(ctx, t, sessionState);
-      await drawLabel(ctx, t, sessionState);
+      if (!modeStrip) {
+        const t = { s: s * k, ox: F.x * k, oy: F.y * k };
+        gambarQRKartu(ctx, t, sessionState);
+        await drawLabel(ctx, t, sessionState);
+      }
     }
 
-    async function composeCard(ctx, W, H, photoImg, sesi, marginPx) {
+    async function composeCard(ctx, W, H, photoImg, sesi, marginPx, adj) {
       ctx.fillStyle = appConfig.canvasBgColor || '#FFFFFF';
       ctx.fillRect(0, 0, W, H);
       const TW = appConfig.templateWidth || W;
@@ -1059,7 +1356,7 @@
       const ss = sesi || sessionState;
       const F = FILTERS[ss.filter] || null;
       const foto = function() {
-        drawFitted(ctx, photoImg, area, appConfig.fitMode);
+        drawFitted(ctx, photoImg, area, appConfig.fitMode, adj);
         terapkanFilter(ctx, area.x, area.y, area.width, area.height, F);
       };
       const fr = await getFrameImg();
@@ -1093,7 +1390,9 @@
         filter: filterAktif(),
         noAntrian: sessionState.noAntrian,
         kodeMember: sessionState.kodeMember,
-        fotos: [1, 2, 3].map(function(n) { return sessionState.photos[n].dataUrl; })
+        fotos: [1, 2, 3].map(function(n) { return sessionState.photos[n].dataUrl; }),
+        layout: layoutAktif(),
+        adjusts: [1, 2, 3].map(function(n) { return Object.assign({ zoom: 1, ox: 0, oy: 0 }, sessionState.photos[n].adj || {}); })
       };
     }
 
@@ -1155,7 +1454,7 @@
           tulis('Menyusun frame video ' + n + ' dari 3...');
           const fc = document.createElement('canvas');
           fc.width = VW; fc.height = VH;
-          await composeCard(fc.getContext('2d'), VW, VH, await loadImg(sesi.fotos[n - 1]), sesi);
+          await composeCard(fc.getContext('2d'), VW, VH, await loadImg(sesi.fotos[n - 1]), sesi, 0, sesi.adjusts && sesi.adjusts[n - 1]);
           frames.push(fc);
         }
 
@@ -1266,7 +1565,7 @@
         for (let n = 1; n <= 3; n++) {
           status.textContent = 'Menyusun frame ' + n + ' dari 3...';
           const img = await loadImg(sesi.fotos[n - 1]);
-          await composeCard(ctx, GW, GH, img, sesi);
+          await composeCard(ctx, GW, GH, img, sesi, 0, sesi.adjusts && sesi.adjusts[n - 1]);
           const data = ctx.getImageData(0, 0, GW, GH).data;
           const palette = gifLib.quantize(data, 256);
           frames.push({ index: gifLib.applyPalette(data, palette), palette: palette });
@@ -1313,6 +1612,10 @@
     /* ---------------- Cetak (1 halaman 4R per foto) ---------------- */
     function cetakGambar(list) {
       if (!list || !list.length) { showBanner('Belum ada file cetak.', 'error'); return; }
+      Promise.all(list.map(putarJikaPotret)).then(function(siap) { cetakSiap(siap); });
+    }
+
+    function cetakSiap(list) {
       const area = el('print-sheet-area');
       area.innerHTML = '';
       const tunggu = list.map(function(src) {
@@ -1374,10 +1677,21 @@
       }
       antrianLatar = antrianLatar.then(async function() {
         try {
-          for (let n = 2; n <= 3; n++) {
+          const modeStrip = sesi.layout === 'strip';
+          if (modeStrip) {
+            tulis('Menyimpan strip ke folder member...');
+            await callServer('uploadFotoMember', {
+              memberFolderId: sesi.memberFolderId,
+              noAntrian: sesi.noAntrian,
+              kodeMember: sesi.kodeMember,
+              nama: 'strip',
+              base64Data: sesi.stripData
+            });
+          }
+          for (let n = modeStrip ? 1 : 2; n <= 3; n++) {
             tulis('Menyimpan foto ' + n + ' berframe ke Drive...');
             const data = await kartu(n);
-            if (masihSesiIni()) {
+            if (masihSesiIni() && !modeStrip) {
               sessionState.cetakList[n - 1] = data;
               renderThumbs(el('cetak-thumbs'), sessionState.cetakList.filter(Boolean), false);
             }
@@ -1418,14 +1732,28 @@
         const kartu = async function(n) {
           const c = document.createElement('canvas');
           c.width = W; c.height = H;
-          await composeCard(c.getContext('2d'), W, H, await loadImg(sesi.fotos[n - 1]), sesi, marginPx);
+          await composeCard(c.getContext('2d'), W, H, await loadImg(sesi.fotos[n - 1]), sesi, marginPx, sesi.adjusts[n - 1]);
           return c.toDataURL('image/jpeg', 0.92);
         };
 
-        // Foto 1 (yang dicetak) dibuat & disimpan lebih dulu
-        const cetak1 = await kartu(1);
+        // File cetak dibuat & disimpan lebih dulu: polaroid foto 1, atau strip 3 foto
+        const modeStrip = sesi.layout === 'strip';
+        let cetak1;
+        if (modeStrip) {
+          const C = stripCfg();
+          const c = document.createElement('canvas');
+          c.width = C.width; c.height = C.height;
+          const imgs = [];
+          for (let k = 0; k < 3; k++) imgs.push(await loadImg(sesi.fotos[k]));
+          await composeStrip(c.getContext('2d'), C.width, C.height, imgs, sesi, marginPx, sesi.adjusts);
+          cetak1 = c.toDataURL('image/jpeg', 0.92);
+          sesi.stripData = cetak1;
+        } else {
+          cetak1 = await kartu(1);
+        }
         sessionState.cetakList = [cetak1];
         renderThumbs(el('cetak-thumbs'), [cetak1], false);
+        if (modeStrip && el('cetak-thumbs').firstChild) el('cetak-thumbs').firstChild.lastChild.textContent = 'Strip 3 Foto • dicetak';
 
         el('btn-to-step-3-text').textContent = 'Menyimpan file cetak...';
         const res = await callServer('finalisasiCetakDanLog', {
@@ -1433,7 +1761,8 @@
           kodeMember: sessionState.kodeMember,
           memberFolderId: sessionState.memberFolderId,
           cetakFolderId: sessionState.cetakFolderId,
-          cetakList: [cetak1]
+          cetakList: [cetak1],
+          simpanFotoMember: !modeStrip // strip: foto member diupload terpisah di latar
         });
 
         el('step-3-session-label').textContent = sessionState.noAntrian + '_' + sessionState.kodeMember;
@@ -1548,6 +1877,7 @@
         if (!el('camera-modal').classList.contains('hidden')) aturLayoutKamera();
       });
       renderPilihanFilter();
+      renderPilihanLayout();
       el('btn-cam-close').addEventListener('click', closeCamera);
       el('btn-to-step-3').addEventListener('click', handleToStep3);
       el('btn-cetak-sekarang').addEventListener('click', function() { cetakGambar(sessionState.cetakList.slice(0, 1)); });
@@ -1571,6 +1901,7 @@
       el('list-search').addEventListener('input', renderList);
       el('btn-qr-close').addEventListener('click', function() { el('qr-modal').classList.add('hidden'); });
       el('btn-gif-retry').addEventListener('click', function() { buatGif(); });
+      pasangEditor();
       el('btn-video-retry').addEventListener('click', function() {
         if (jobTerakhir) jadwalkanLatar(jobTerakhir.sesi, jobTerakhir.kartu);
       });
