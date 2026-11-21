@@ -152,6 +152,11 @@
         </div>
       </div>
 
+      <div id="mode-tabs" class="grid grid-cols-2 gap-2 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200">
+        <button id="tab-foto" type="button" class="step-pill-active py-2.5 rounded-xl border text-sm font-extrabold">📸 Sesi Foto</button>
+        <button id="tab-daftar" type="button" class="py-2.5 rounded-xl border border-transparent text-slate-500 text-sm font-bold">📝 Pendaftaran</button>
+      </div>
+
       <div id="step-indicators" class="grid grid-cols-3 gap-2 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200">
         <div id="step-indicator-1" class="step-pill-active flex items-center justify-center py-2.5 px-2 rounded-xl border text-xs font-bold">1. Kode</div>
         <div id="step-indicator-2" class="flex items-center justify-center py-2.5 px-2 rounded-xl border border-transparent text-slate-500 text-xs font-bold">2. 3 Foto</div>
@@ -273,6 +278,39 @@
         <input id="list-search" type="text" placeholder="Cari kode member / no antrian..." class="w-full h-12 px-4 rounded-xl border-2 border-slate-200 font-semibold uppercase">
         <div id="list-items" class="space-y-2"></div>
       </section>
+
+      <!-- SESI PENDAFTARAN & REKAP -->
+      <section id="step-daftar" class="hidden flex-1 flex flex-col space-y-4">
+        <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-3">
+          <div>
+            <h2 class="text-xl font-extrabold text-slate-900">Pendaftaran Member</h2>
+            <p class="text-xs text-slate-500">Scan / ketik kode member, tekan Enter, lalu ketik nama dan tekan Enter untuk menyimpan.</p>
+          </div>
+          <form id="form-daftar" class="space-y-3" autocomplete="off">
+            <input id="daftar-kode" type="text" placeholder="Kode member" class="w-full h-14 px-4 text-xl font-extrabold uppercase tracking-wider text-center rounded-2xl border-2 border-slate-300 focus:border-blue-600 outline-none">
+            <input id="daftar-nama" type="text" placeholder="Nama member" maxlength="60" class="w-full h-14 px-4 text-lg font-bold text-center rounded-2xl border-2 border-slate-300 focus:border-blue-600 outline-none">
+            <button id="btn-daftar-simpan" type="submit" class="btn-primary w-full h-14 rounded-2xl text-lg font-extrabold shadow-md">✓ Simpan Pendaftaran</button>
+          </form>
+          <p id="daftar-status" class="text-sm font-semibold min-h-[1.25rem]"></p>
+        </div>
+
+        <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-extrabold text-slate-900">Rekap Pendaftaran</h2>
+            <button id="btn-rekap-refresh" type="button" class="px-3 h-10 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold">↻ Muat Ulang</button>
+          </div>
+          <input id="rekap-date" type="date" class="w-full h-12 px-3 rounded-xl border-2 border-slate-200 font-semibold">
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-2"><div id="rekap-total" class="text-2xl font-extrabold">0</div><div class="text-[11px] font-bold text-slate-500">Terdaftar</div></div>
+            <div class="rounded-2xl bg-emerald-50 border border-emerald-200 p-2"><div id="rekap-sudah" class="text-2xl font-extrabold text-emerald-700">0</div><div class="text-[11px] font-bold text-emerald-700">Sudah Foto</div></div>
+            <div class="rounded-2xl bg-amber-50 border border-amber-200 p-2"><div id="rekap-belum" class="text-2xl font-extrabold text-amber-700">0</div><div class="text-[11px] font-bold text-amber-700">Belum Foto</div></div>
+          </div>
+          <div id="rekap-filter" class="grid grid-cols-3 gap-2"></div>
+          <input id="rekap-search" type="text" placeholder="Cari nama / kode member..." class="w-full h-12 px-4 rounded-xl border-2 border-slate-200 font-semibold">
+          <p id="rekap-summary" class="text-xs text-slate-500"></p>
+          <div id="rekap-items" class="space-y-2"></div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -358,16 +396,16 @@
     }
 
     function goToStep(step) {
-      ['1', '2', '3', 'list'].forEach(function(n) {
+      ['1', '2', '3', 'list', 'daftar'].forEach(function(n) {
         el('step-' + n).classList.toggle('hidden', String(step) !== n);
       });
-      el('step-indicators').classList.toggle('hidden', step === 'list');
+      el('step-indicators').classList.toggle('hidden', step === 'list' || step === 'daftar');
       [1, 2, 3].forEach(function(n) {
         el('step-indicator-' + n).className = n === step
           ? 'step-pill-active flex items-center justify-center py-2.5 px-2 rounded-xl border text-xs font-bold'
           : 'flex items-center justify-center py-2.5 px-2 rounded-xl border border-transparent text-slate-500 text-xs font-bold';
       });
-      if (step !== 'list') currentStep = step;
+      if (step !== 'list' && step !== 'daftar') currentStep = step;
       if (step === 1) setTimeout(function() { el('input-member-code').focus(); }, 60);
     }
 
@@ -744,6 +782,124 @@
     }
 
     /* ---------------- Langkah 1 ---------------- */
+    /* ---------------- Sesi PENDAFTARAN & REKAP ---------------- */
+    const KELAS_TAB = 'py-2.5 rounded-xl border border-transparent text-slate-500 text-sm font-bold';
+    const KELAS_TAB_AKTIF = 'step-pill-active py-2.5 rounded-xl border text-sm font-extrabold';
+    let rekapCache = [];
+    let rekapFilter = 'semua';
+
+    function gantiMode(mode) {
+      const daftar = mode === 'daftar';
+      tulisLokal('pb_mode', daftar ? 'daftar' : 'foto');
+      el('tab-foto').className = daftar ? KELAS_TAB : KELAS_TAB_AKTIF;
+      el('tab-daftar').className = daftar ? KELAS_TAB_AKTIF : KELAS_TAB;
+      el('btn-open-list').classList.toggle('hidden', daftar);
+      if (daftar) {
+        goToStep('daftar');
+        loadRekap();
+        setTimeout(function() { el('daftar-kode').focus(); }, 60);
+      } else {
+        goToStep(currentStep);
+      }
+    }
+
+    function statusDaftar(msg, jenis) {
+      const st = el('daftar-status');
+      st.className = 'text-sm font-semibold min-h-[1.25rem] ' + (jenis === 'error' ? 'text-red-700' : jenis === 'ok' ? 'text-emerald-700' : 'text-slate-600');
+      st.textContent = msg;
+    }
+
+    async function simpanDaftar(e) {
+      if (e) e.preventDefault();
+      const kode = String(el('daftar-kode').value || '').trim().toUpperCase();
+      const nama = String(el('daftar-nama').value || '').replace(/\s+/g, ' ').trim();
+      el('daftar-kode').value = kode;
+      if (!kode || !(new RegExp(appConfig.memberCodeRegex)).test(kode)) {
+        statusDaftar('Kode member tidak valid. ' + (appConfig.memberCodeHint || ''), 'error');
+        el('daftar-kode').focus();
+        return;
+      }
+      if (nama.length < 2) {
+        statusDaftar('Nama member belum diisi.', 'error');
+        el('daftar-nama').focus();
+        return;
+      }
+      const btn = el('btn-daftar-simpan');
+      btn.disabled = true;
+      statusDaftar('Menyimpan...', '');
+      try {
+        const r = await callServer('simpanPendaftaran', { kodeMember: kode, nama: nama });
+        statusDaftar((r.status === 'baru' ? '✓ Terdaftar No. ' : '✓ Nama diperbarui, No. ') + r.noDaftar + ' • ' + r.kodeMember + ' • ' + r.nama, 'ok');
+        el('daftar-kode').value = '';
+        el('daftar-nama').value = '';
+        el('daftar-kode').focus();
+        loadRekap();
+      } catch (err) {
+        statusDaftar('Gagal: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function loadRekap() {
+      el('rekap-summary').textContent = 'Memuat...';
+      try {
+        const res = await callServer('getRekapPendaftaran', el('rekap-date').value || '');
+        el('rekap-date').value = res.tanggal;
+        el('rekap-total').textContent = res.total;
+        el('rekap-sudah').textContent = res.sudahFoto;
+        el('rekap-belum').textContent = res.belumFoto;
+        rekapCache = res.items || [];
+        renderRekap();
+      } catch (err) {
+        el('rekap-summary').textContent = 'Gagal memuat rekap: ' + err.message;
+      }
+    }
+
+    function renderRekap() {
+      const fb = el('rekap-filter');
+      fb.innerHTML = '';
+      [['semua', 'Semua'], ['sudah', 'Sudah Foto'], ['belum', 'Belum Foto']].forEach(function(p) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = p[1];
+        b.className = 'h-10 rounded-xl text-xs font-extrabold border ' + (rekapFilter === p[0] ? 'btn-primary border-transparent' : 'bg-slate-100 text-slate-700 border-slate-200');
+        b.addEventListener('click', function() { rekapFilter = p[0]; renderRekap(); });
+        fb.appendChild(b);
+      });
+      const q = String(el('rekap-search').value || '').trim().toUpperCase();
+      const items = rekapCache.filter(function(it) {
+        if (rekapFilter === 'sudah' && !it.sudahFoto) return false;
+        if (rekapFilter === 'belum' && it.sudahFoto) return false;
+        return !q || it.nama.toUpperCase().indexOf(q) >= 0 || it.kodeMember.indexOf(q) >= 0 || it.noDaftar.indexOf(q) >= 0;
+      });
+      el('rekap-summary').textContent = items.length + ' dari ' + rekapCache.length + ' pendaftar ditampilkan';
+      const box = el('rekap-items');
+      if (!items.length) {
+        box.innerHTML = '<p class="text-sm text-slate-500 text-center py-6">Belum ada data.</p>';
+        return;
+      }
+      box.innerHTML = items.map(function(it, i) {
+        const status = it.sudahFoto
+          ? '<span class="shrink-0 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">✓ Foto #' + esc(it.noAntrian) + '</span>'
+          : '<button data-foto="' + i + '" type="button" class="shrink-0 px-3 h-9 rounded-xl bg-amber-100 text-amber-900 text-xs font-extrabold">📸 Foto</button>';
+        return '<div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-2">' +
+          '<div class="min-w-0"><div class="text-base font-extrabold truncate">' + esc(it.nama) + '</div>' +
+          '<div class="text-xs text-slate-500">No. ' + esc(it.noDaftar) + ' • ' + esc(it.kodeMember) + ' • daftar ' + esc(it.jam) +
+          (it.sudahFoto ? ' • foto ' + esc(it.jamFoto) : '') + '</div></div>' + status + '</div>';
+      }).join('');
+      box.querySelectorAll('button[data-foto]').forEach(function(b) {
+        b.addEventListener('click', function() {
+          const it = items[parseInt(b.getAttribute('data-foto'), 10)];
+          currentStep = 1;
+          gantiMode('foto');
+          el('input-member-code').value = it.kodeMember;
+          el('input-member-code').focus();
+          showBanner('Kode ' + it.kodeMember + ' (' + it.nama + ') siap. Tekan Enter / tombol Lanjut untuk mulai foto.', 'ok');
+        });
+      });
+    }
+
     async function handleStep1(e) {
       if (e) e.preventDefault();
       showBanner('', '');
@@ -761,8 +917,20 @@
         const res = await callServer('mulaiSesiMember', kode);
         Object.assign(sessionState, res);
         el('session-badge-title').textContent = res.noAntrian + '_' + res.kodeMember;
+        sessionState.namaMember = '';
         resetPhotos();
         goToStep(2);
+        // Tampilkan nama dari data pendaftaran (tidak menghambat sesi foto)
+        callServer('cariPendaftar', res.kodeMember).then(function(p) {
+          if (sessionState.memberFolderId !== res.memberFolderId) return;
+          if (p && p.nama) {
+            sessionState.namaMember = p.nama;
+            el('session-badge-title').textContent = res.noAntrian + '_' + res.kodeMember + ' • ' + p.nama;
+            if (!p.hariIni) showBanner('Catatan: ' + p.nama + ' terdaftar pada ' + p.tanggal + ', bukan hari ini.', 'warn');
+          } else {
+            showBanner('Kode ' + res.kodeMember + ' belum ada di data Pendaftaran. Foto tetap bisa dilanjutkan.', 'warn');
+          }
+        }).catch(function() {});
       } catch (err) {
         showBanner(err.message, 'error');
       } finally {
@@ -1890,6 +2058,15 @@
         goToStep(1);
       });
 
+      el('tab-foto').addEventListener('click', function() { gantiMode('foto'); });
+      el('tab-daftar').addEventListener('click', function() { gantiMode('daftar'); });
+      el('form-daftar').addEventListener('submit', simpanDaftar);
+      el('daftar-kode').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); if (el('daftar-kode').value.trim()) el('daftar-nama').focus(); }
+      });
+      el('btn-rekap-refresh').addEventListener('click', loadRekap);
+      el('rekap-date').addEventListener('change', loadRekap);
+      el('rekap-search').addEventListener('input', renderRekap);
       el('btn-open-list').addEventListener('click', function() {
         if (!el('list-date').value) el('list-date').value = appConfig.tanggalHariIni;
         goToStep('list');
@@ -1981,6 +2158,7 @@
 
       const awal = apiSettings();
       if (!awal.url) bukaSetup('Isi URL Web App untuk mulai.');
+      if (bacaLokal('pb_mode') === 'daftar') gantiMode('daftar'); // HP meja pendaftaran tetap di mode Pendaftaran
       else muatKonfigurasi();
     });
   </script>
